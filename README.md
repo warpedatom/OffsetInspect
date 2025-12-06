@@ -1,3 +1,11 @@
+![Release](https://img.shields.io/github/v/release/warpedatom/OffsetInspect)
+![License](https://img.shields.io/github/license/warpedatom/OffsetInspect)
+![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2F7.x-blue)
+![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey)
+![Downloads](https://img.shields.io/github/downloads/warpedatom/OffsetInspect/total)
+![Repo Size](https://img.shields.io/github/repo-size/warpedatom/OffsetInspect)
+![Last Commit](https://img.shields.io/github/last-commit/warpedatom/OffsetInspect)
+
 # OffsetInspect  
 PE Offset & Hex Context Inspector  
 Author: Jared Perry (Velkris)  
