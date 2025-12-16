@@ -8,6 +8,8 @@
 ![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey)
 ![Repo Size](https://img.shields.io/github/repo-size/warpedatom/OffsetInspect)
 ![Last Commit](https://img.shields.io/github/last-commit/warpedatom/OffsetInspect)
+![Security Policy](https://img.shields.io/badge/Security-Policy-green)
+![Use Case](https://img.shields.io/badge/Use-Red%20Team-darkred)
 
 # OffsetInspect
 
