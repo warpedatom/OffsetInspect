@@ -1,9 +1,9 @@
 param(
     [Parameter(Mandatory=$true)]
-    [string]$FilePath,
+    [string[]]$FilePaths,
 
     [Parameter(Mandatory=$true)]
-    [string]$OffsetInput,
+    [string[]]$OffsetInputs,
 
     [int]$ByteWindow = 32,
     [int]$ContextLines = 3
@@ -13,67 +13,16 @@ param(
 # Banner
 # ===============================================================
 Write-Host "/******************************************************************" -ForegroundColor DarkCyan
-Write-Host " *                           OffsetInspect                         *" -ForegroundColor DarkCyan
-Write-Host " *                 PE Offset & Hex Context Inspector               *" -ForegroundColor DarkCyan
-Write-Host " *                      DreadHost Research Tool                    *" -ForegroundColor DarkCyan
+Write-Host " *                           OffsetInspect                          *" -ForegroundColor DarkCyan
+Write-Host " *                  PE Offset & Hex Context Inspector                *" -ForegroundColor DarkCyan
+Write-Host " *                       DreadHost Research Tool                     *" -ForegroundColor DarkCyan
 Write-Host " ******************************************************************/" -ForegroundColor DarkCyan
 Write-Host ""
-Write-Host "    Version:         1.0.0" -ForegroundColor Cyan
-Write-Host "    Author:          Jared Perry (Velkris)" -ForegroundColor Cyan
-Write-Host "    GitHub:          https://github.com/warpedatom" -ForegroundColor Cyan
-Write-Host "    Date:            2025-12-05" -ForegroundColor Cyan
+Write-Host "    Version:          1.0.1" -ForegroundColor Cyan
+Write-Host "    Authors:           Jared Perry (Velkris), secretlay3r" -ForegroundColor Cyan
+Write-Host "    GitHub:           https://github.com/warpedatom" -ForegroundColor Cyan
+Write-Host "    Date:             2025-12-28" -ForegroundColor Cyan
 Write-Host ""
-
-# ===============================================================
-# Validate File
-# ===============================================================
-if (-not (Test-Path $FilePath)) {
-    Write-Error "File not found: $FilePath"
-    exit
-}
-
-# ===============================================================
-# Parse Offset
-# ===============================================================
-if ($OffsetInput -match '^0x[0-9A-Fa-f]+$') {
-    $Offset = [Convert]::ToInt64($OffsetInput, 16)
-}
-elseif ($OffsetInput -match '^[0-9A-Fa-f]+$') {
-    if ($OffsetInput -match '[A-Fa-f]') { $Offset = [Convert]::ToInt64($OffsetInput, 16) }
-    else { $Offset = [int64]$OffsetInput }
-}
-else {
-    Write-Error "Invalid offset format: $OffsetInput"
-    exit
-}
-
-# ===============================================================
-# Load Bytes
-# ===============================================================
-$bytes = [System.IO.File]::ReadAllBytes($FilePath)
-$FileSize = $bytes.Length
-
-if ($Offset -ge $FileSize) {
-    Write-Error "Offset exceeds file size ($FileSize bytes)."
-    exit
-}
-
-# ===============================================================
-# Determine Line Number
-# ===============================================================
-$lineNumber = 1
-for ($i = 0; $i -lt $Offset; $i++) {
-    if ($bytes[$i] -eq 0x0A) { $lineNumber++ }
-}
-
-$lines = Get-Content -Path $FilePath
-
-# ===============================================================
-# Compute Hex Window
-# ===============================================================
-$startByte = [Math]::Max(0, $Offset - $ByteWindow)
-$endByte   = [Math]::Min($FileSize - 1, $Offset + $ByteWindow)
-$window    = $bytes[$startByte..$endByte]
 
 # ===============================================================
 # Hex Dump Formatter
@@ -88,24 +37,20 @@ function Format-HexDump {
     $rows = @()
 
     for ($i = 0; $i -lt $Data.Length; $i += 16) {
-
         $chunk = $Data[$i..([Math]::Min($i+15, $Data.Length-1))]
         $hexParts = @()
         $asciiParts = @()
 
         for ($b = 0; $b -lt $chunk.Length; $b++) {
-
             $byteOffset = $StartOffset + $i + $b
             $hexVal = $chunk[$b].ToString("X2")
 
-            # Highlight this exact byte
             if ($byteOffset -eq $HighlightOffset) {
                 $hexParts += @{ Text = $hexVal; Color = "Yellow" }
             } else {
                 $hexParts += @{ Text = $hexVal; Color = "Green" }
             }
 
-            # ASCII output
             if ($chunk[$b] -ge 32 -and $chunk[$b] -le 126) {
                 $asciiParts += [char]$chunk[$b]
             }
@@ -126,53 +71,83 @@ function Format-HexDump {
     return $rows
 }
 
-$HexDump = Format-HexDump -Data $window -StartOffset $startByte -HighlightOffset $Offset
-
 # ===============================================================
-# Output Header Block
+# Process Each File
 # ===============================================================
-Write-Host "`n====================================================================================================" -ForegroundColor DarkYellow
-Write-Host "File:              $FilePath" -ForegroundColor Green
-Write-Host "Offset (input):    $OffsetInput" -ForegroundColor Green
-Write-Host "Offset (decimal):  $Offset" -ForegroundColor Green
-Write-Host "File Size:         $FileSize bytes" -ForegroundColor Green
-Write-Host "Line Number:       ${lineNumber}" -ForegroundColor Green
-Write-Host ""
+for ($fileIndex = 0; $fileIndex -lt $FilePaths.Length; $fileIndex++) {
+    $FilePath = $FilePaths[$fileIndex]
+    $OffsetInput = if ($OffsetInputs.Count -gt $fileIndex) { $OffsetInputs[$fileIndex] } else { $OffsetInputs[0] }
 
-# ===============================================================
-# Show Line Content + Caret
-# ===============================================================
-if ($lineNumber -le $lines.Length) {
-
-    Write-Host "---------------------------------------- Line Content ----------------------------------------------" -ForegroundColor DarkYellow
-    Write-Host "Line ${lineNumber}: $($lines[$lineNumber - 1])" -ForegroundColor Green
-
-    $charPos = 0
-    for ($i = $Offset - 1; $i -ge 0; $i--) {
-        if ($bytes[$i] -eq 0x0A) { break }
-        $charPos++
+    if (-not (Test-Path $FilePath)) {
+        Write-Error "File not found: $FilePath"
+        continue
     }
 
-    Write-Host (" " * 12) + (" " * $charPos) + "↑" -ForegroundColor Yellow
-}
-
-# ===============================================================
-# Hex Dump
-# ===============================================================
-Write-Host "`n------------------------------------------ Hex Dump ------------------------------------------------" -ForegroundColor DarkYellow
-
-foreach ($row in $HexDump) {
-
-    # Offset label
-    Write-Host -NoNewline "$($row.Offset)  " -ForegroundColor Green
-
-    # Render each hex byte with individual color
-    foreach ($hx in $row.HexParts) {
-        Write-Host -NoNewline "$($hx.Text) " -ForegroundColor $hx.Color
+    if ($OffsetInput -match '^0x[0-9A-Fa-f]+$') {
+        $Offset = [Convert]::ToInt64($OffsetInput, 16)
+    }
+    elseif ($OffsetInput -match '^[0-9A-Fa-f]+$') {
+        if ($OffsetInput -match '[A-Fa-f]') { $Offset = [Convert]::ToInt64($OffsetInput, 16) }
+        else { $Offset = [int64]$OffsetInput }
+    }
+    else {
+        Write-Error "Invalid offset format for $FilePath`: $OffsetInput"
+        continue
     }
 
-    # ASCII region
-    Write-Host "  $($row.Ascii)" -ForegroundColor Green
-}
+    $bytes = [System.IO.File]::ReadAllBytes($FilePath)
+    $FileSize = $bytes.Length
 
-Write-Host "`n====================================================================================================" -ForegroundColor DarkCyan
+    if ($Offset -ge $FileSize) {
+        Write-Error "Offset exceeds file size ($FileSize bytes) for $FilePath."
+        continue
+    }
+
+    $lineNumber = 1
+    for ($i = 0; $i -lt $Offset; $i++) {
+        if ($bytes[$i] -eq 0x0A) { $lineNumber++ }
+    }
+
+    $lines = Get-Content -Path $FilePath
+
+    $startByte = [Math]::Max(0, $Offset - $ByteWindow)
+    $endByte   = [Math]::Min($FileSize - 1, $Offset + $ByteWindow)
+    $window    = $bytes[$startByte..$endByte]
+
+    $HexDump = Format-HexDump -Data $window -StartOffset $startByte -HighlightOffset $Offset
+
+    Write-Host "`n====================================================================================================" -ForegroundColor DarkYellow
+    Write-Host "File ($($fileIndex+1)/$($FilePaths.Length)): $FilePath" -ForegroundColor Green
+    Write-Host "Offset (input):    $OffsetInput" -ForegroundColor Green
+    Write-Host "Offset (decimal):  $Offset" -ForegroundColor Green
+    Write-Host "File Size:         $FileSize bytes" -ForegroundColor Green
+    Write-Host "Line Number:       ${lineNumber}" -ForegroundColor Green
+    Write-Host ""
+
+    if ($lineNumber -le $lines.Length) {
+        Write-Host "---------------------------------------- Line Content ----------------------------------------------" -ForegroundColor DarkYellow
+        Write-Host "Line ${lineNumber}: $($lines[$lineNumber - 1])" -ForegroundColor Green
+
+        $charPos = 0
+        for ($i = $Offset - 1; $i -ge 0; $i--) {
+            if ($bytes[$i] -eq 0x0A) { break }
+            $charPos++
+        }
+
+        Write-Host (" " * 12) + (" " * $charPos) + "↑" -ForegroundColor Yellow
+    }
+
+    Write-Host "`n------------------------------------------ Hex Dump ------------------------------------------------" -ForegroundColor DarkYellow
+
+    foreach ($row in $HexDump) {
+        Write-Host -NoNewline "$($row.Offset)  " -ForegroundColor Green
+
+        foreach ($hx in $row.HexParts) {
+            Write-Host -NoNewline "$($hx.Text) " -ForegroundColor $hx.Color
+        }
+
+        Write-Host "  $($row.Ascii)" -ForegroundColor Green
+    }
+
+    Write-Host "`n====================================================================================================" -ForegroundColor DarkCyan
+}
