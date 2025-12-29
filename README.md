@@ -54,7 +54,7 @@ The tool is deliberately scoped to inspection and validation, allowing analysts 
 
 - Exact byte highlighting at user-specified offsets  
 - Mapping of raw offsets to file line numbers
-- Check multpile files at once  
+- Check multiple files at once  
 - Configurable byte window size  
 - Structured hex + ASCII output  
 - Color-coded terminal rendering for clarity  
