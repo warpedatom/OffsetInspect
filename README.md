@@ -2,18 +2,18 @@
 
 ![Dread-Host-Banner](./assets/Dread-Host-Banner.png)
 
-![Release](https://img.shields.io/github/v/release/warpedatom/OffsetInspect)
-![License](https://img.shields.io/github/license/warpedatom/OffsetInspect)
+[![Release](https://img.shields.io/github/v/release/warpedatom/OffsetInspect)](https://github.com/warpedatom/OffsetInspect/releases)
+[![License](https://img.shields.io/github/license/warpedatom/OffsetInspect)](./LICENSE)
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2F7.x-blue)
 ![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey)
 ![Repo Size](https://img.shields.io/github/repo-size/warpedatom/OffsetInspect)
 ![Last Commit](https://img.shields.io/github/last-commit/warpedatom/OffsetInspect)
 ![Security Policy](https://img.shields.io/badge/Security-Policy-green)
-[![Use Case](https://img.shields.io/badge/Use-Red%20Team-darkred
-[![PowerShell Gallery Version](https://img.shields.io/powershellgallery/v/OffsetInspect?label=PSGallery)](https://www.powershellgallery.com/packages/OffsetInspect)
-[![PowerShell Gallery Downloads](https://img.shields.io/powershellgallery/dt/OffsetInspect)](https://www.powershellgallery.com/packages/OffsetInspect)
-[![CI](https://img.shields.io/github/actions/workflow/status/warpedatom/OffsetInspect/ci.yml?label=CI)](https://github.com/warpedatom/OffsetInspect/actions/workflows/ci.yml)
+[![Use Case](https://img.shields.io/badge/Use-Red%20Team-darkred)](#use-case)
 
+[![PSGallery](https://img.shields.io/powershellgallery/v/OffsetInspect?label=PSGallery)](https://www.powershellgallery.com/packages/OffsetInspect)
+[![Downloads](https://img.shields.io/powershellgallery/dt/OffsetInspect)](https://www.powershellgallery.com/packages/OffsetInspect)
+[![CI](https://img.shields.io/github/actions/workflow/status/warpedatom/OffsetInspect/ci.yml?label=CI)](https://github.com/warpedatom/OffsetInspect/actions/workflows/ci.yml)
 
 # OffsetInspect
 
