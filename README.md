@@ -10,9 +10,9 @@
 ![Last Commit](https://img.shields.io/github/last-commit/warpedatom/OffsetInspect)
 ![Security Policy](https://img.shields.io/badge/Security-Policy-green)
 ![Use Case](https://img.shields.io/badge/Use-Red%20Team-darkred
-[![PowerShell Gallery Version](https://img.shields.io/powershellgallery/v/OffsetInspect?label=PSGallery)](https://www.powershellgallery.com/packages/OffsetInspect)
-[![PowerShell Gallery Downloads](https://img.shields.io/powershellgallery/dt/OffsetInspect)](https://www.powershellgallery.com/packages/OffsetInspect)
-[![CI](https://img.shields.io/github/actions/workflow/status/warpedatom/OffsetInspect/ci.yml?label=CI)](https://github.com/warpedatom/OffsetInspect/actions/workflows/ci.yml)
+![PowerShell Gallery Version](https://img.shields.io/powershellgallery/v/OffsetInspect?label=PSGallery)](https://www.powershellgallery.com/packages/OffsetInspect)
+![PowerShell Gallery Downloads](https://img.shields.io/powershellgallery/dt/OffsetInspect)](https://www.powershellgallery.com/packages/OffsetInspect)
+![CI](https://img.shields.io/github/actions/workflow/status/warpedatom/OffsetInspect/ci.yml?label=CI)](https://github.com/warpedatom/OffsetInspect/actions/workflows/ci.yml)
 
 
 # OffsetInspect
