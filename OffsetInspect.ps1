@@ -13,13 +13,13 @@ param(
 # Banner
 # ===============================================================
 Write-Host "/******************************************************************" -ForegroundColor DarkCyan
-Write-Host " *                           OffsetInspect                          *" -ForegroundColor DarkCyan
-Write-Host " *                  PE Offset & Hex Context Inspector                *" -ForegroundColor DarkCyan
-Write-Host " *                       DreadHost Research Tool                     *" -ForegroundColor DarkCyan
+Write-Host " *                           OffsetInspect                        *" -ForegroundColor DarkCyan
+Write-Host " *                  PE Offset & Hex Context Inspector             *" -ForegroundColor DarkCyan
+Write-Host " *                       DreadHost Research Tool                  *" -ForegroundColor DarkCyan
 Write-Host " ******************************************************************/" -ForegroundColor DarkCyan
 Write-Host ""
 Write-Host "    Version:          1.0.1" -ForegroundColor Cyan
-Write-Host "    Authors:           Jared Perry (Velkris), secretlay3r" -ForegroundColor Cyan
+Write-Host "    Authors:          Velkris, secretlay3r" -ForegroundColor Cyan
 Write-Host "    GitHub:           https://github.com/warpedatom" -ForegroundColor Cyan
 Write-Host "    Date:             2025-12-28" -ForegroundColor Cyan
 Write-Host ""
