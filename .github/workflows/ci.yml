@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+
+jobs:
+  test:
+    name: Run Pester tests
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          Install-Module Pester -Force -Scope CurrentUser
+          Import-Module Pester
+
+      - name: Run tests
+        shell: pwsh
+        run: |
+          Invoke-Pester -Path .\tests -Output Summary -EnableExit
+
+  publish:
+    name: Publish to PowerShell Gallery
+    needs: test
+    runs-on: windows-latest
+    # Only run on tags like v1.0.1
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PowerShellGet + Pester
+        shell: pwsh
+        run: |
+          Install-Module PowerShellGet -Force -Scope CurrentUser
+          Install-Module Pester -Force -Scope CurrentUser
+
+      # OPTIONAL: import code-signing certificate from secret (advanced)
+      # Store a base64-encoded PFX + password in GitHub secrets:
+      #   CODESIGNING_CERT_PFX
+      #   CODESIGNING_CERT_PASSWORD
+      - name: Import code-signing certificate
+        if: env.CODESIGNING_CERT_PFX != ''
+        shell: pwsh
+        env:
+          CODESIGNING_CERT_PFX: ${{ secrets.CODESIGNING_CERT_PFX }}
+          CODESIGNING_CERT_PASSWORD: ${{ secrets.CODESIGNING_CERT_PASSWORD }}
+        run: |
+          $pfxBytes = [Convert]::FromBase64String($env:CODESIGNING_CERT_PFX)
+          $pfxPath  = Join-Path $env:USERPROFILE 'codesign.pfx'
+          [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
+
+          $securePassword = ConvertTo-SecureString $env:CODESIGNING_CERT_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePassword
+
+          Write-Host "Imported code signing cert: $($cert.Thumbprint)"
+
+          # Sign the module files
+          $filesToSign = @(
+            'OffsetInspect.psm1',
+            'OffsetInspect.ps1'
+          ) | ForEach-Object { Join-Path $PWD $_ }
+
+          foreach ($file in $filesToSign) {
+            Write-Host "Signing $file"
+            Set-AuthenticodeSignature -FilePath $file -Certificate $cert | Out-String | Write-Host
+          }
+
+      - name: Publish module to PSGallery
+        shell: pwsh
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        run: |
+          if (-not $env:PSGALLERY_API_KEY) {
+            throw "PSGALLERY_API_KEY secret is not set."
+          }
+
+          $path = $PWD  # repo root containing OffsetInspect.psd1
+          Publish-Module -Path $path `
+                         -Repository PSGallery `
+                         -NuGetApiKey $env:PSGALLERY_API_KEY `
+                         -Verbose
