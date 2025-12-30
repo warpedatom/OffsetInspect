@@ -1,8 +1,8 @@
 # Basic Pester tests for OffsetInspect
-# (can be expanded later with more detailed checks)
 
-$root     = Split-Path -Parent $PSScriptRoot
-$manifest = Join-Path $root 'OffsetInspect.psd1'
+$root       = Split-Path -Parent $PSScriptRoot
+$modulePath = Join-Path $root 'module'
+$manifest   = Join-Path $modulePath 'OffsetInspect.psd1'
 
 Describe 'OffsetInspect module manifest' {
     It 'exists' {
@@ -17,7 +17,6 @@ Describe 'OffsetInspect module import and exports' {
 
     It 'exports Invoke-OffsetInspect' {
         Import-Module $manifest -Force
-        $cmd = Get-Command Invoke-OffsetInspect -ErrorAction Stop
-        $cmd | Should -Not -BeNullOrEmpty
+        Get-Command Invoke-OffsetInspect -ErrorAction Stop | Should -Not -BeNullOrEmpty
     }
 }
