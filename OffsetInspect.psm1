@@ -3,10 +3,8 @@
     Module wrapper for OffsetInspect — PE Offset & Hex Context Inspector
 
 .DESCRIPTION
-    This module exposes the Invoke-OffsetInspect function, which wraps
-    OffsetInspect.ps1 located in the repository root.
-
-    Users can import this module and call the tool like a standard PowerShell function.
+    Exposes Invoke-OffsetInspect, which wraps OffsetInspect.ps1 in the repo root
+    and supports multi-file inspection.
 
 .AUTHOR
     Jared Perry (Velkris)
@@ -21,7 +19,7 @@ function Invoke-OffsetInspect {
         [Parameter(Mandatory = $true, Position = 1)]
         [string[]]$OffsetInputs,
 
-        [int]$ByteWindow = 32,
+        [int]$ByteWindow   = 32,
         [int]$ContextLines = 3
     )
 
@@ -32,7 +30,6 @@ function Invoke-OffsetInspect {
         throw "OffsetInspect.ps1 not found at expected location: $scriptPath"
     }
 
-    # Invoke the actual script with parameters (multi-file aware)
     & $scriptPath `
         -FilePaths    $FilePaths `
         -OffsetInputs $OffsetInputs `
