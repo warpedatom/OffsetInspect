@@ -24,7 +24,7 @@ jobs:
       - name: Run tests
         shell: pwsh
         run: |
-          Invoke-Pester -Path .\tests -Output Summary -EnableExit
+          Invoke-Pester -Path .\tests -EnableExit
 
   publish:
     name: Publish to PowerShell Gallery
