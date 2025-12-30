@@ -1,5 +1,3 @@
----
-
 ![Dread-Host-Banner](./assets/Dread-Host-Banner.png)
 
 [![Release](https://img.shields.io/github/v/release/warpedatom/OffsetInspect)](https://github.com/warpedatom/OffsetInspect/releases)
