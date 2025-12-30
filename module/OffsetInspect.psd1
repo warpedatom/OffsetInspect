@@ -28,9 +28,11 @@
                 'malware-analysis',
                 'binary-analysis'
             )
-            LicenseUri   = 'https://github.com/warpedatom/OffsetInspect/blob/main/LICENSE'
-            ProjectUri   = 'https://github.com/warpedatom/OffsetInspect'
-            IconUri      = ''
+
+            LicenseUri = 'https://github.com/warpedatom/OffsetInspect/blob/main/LICENSE'
+            ProjectUri = 'https://github.com/warpedatom/OffsetInspect'
+            IconUri    = ''
+
             ReleaseNotes = @"
 OffsetInspect V1.0.1 – Multi-File Capability + Review-Driven Refinement
 
