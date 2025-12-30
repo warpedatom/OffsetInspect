@@ -5,6 +5,7 @@ Describe 'OffsetInspect module manifest' {
     It 'has a valid manifest' {
         { Test-ModuleManifest -Path $manifest } | Should -Not -Throw
     }
+
     It 'has expected module version' {
         $m = Test-ModuleManifest -Path $manifest
         $m.Version.ToString() | Should -Be '1.0.1'
