@@ -9,8 +9,8 @@
 ![Security Policy](https://img.shields.io/badge/Security-Policy-green)
 [![Use Case](https://img.shields.io/badge/Use-Red%20Team-darkred)](#use-case)
 
-[![PSGallery](https://img.shields.io/powershellgallery/v/OffsetInspect?label=PSGallery)](https://www.powershellgallery.com/packages/OffsetInspect)
-[![Downloads](https://img.shields.io/powershellgallery/dt/OffsetInspect)](https://www.powershellgallery.com/packages/OffsetInspect)
+![PowerShell Gallery](https://img.shields.io/powershellgallery/v/OffsetInspect?color=blue&label=PSGallery)
+![PSGallery Downloads](https://img.shields.io/powershellgallery/dt/OffsetInspect?label=downloads)
 [![CI](https://img.shields.io/github/actions/workflow/status/warpedatom/OffsetInspect/ci.yml?label=CI)](https://github.com/warpedatom/OffsetInspect/actions/workflows/ci.yml)
 
 # OffsetInspect
