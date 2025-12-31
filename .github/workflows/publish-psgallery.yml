@@ -1,0 +1,71 @@
+name: Publish to PowerShell Gallery
+
+on:
+  push:
+    tags:
+      - 'v*'   # e.g., v1.0.1, v1.0.2, etc.
+
+jobs:
+  publish:
+    runs-on: windows-latest
+
+    env:
+      PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install NuGet provider and PowerShellGet
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+
+          Install-PackageProvider -Name NuGet -Force -Scope CurrentUser
+          Install-Module PowerShellGet -Force -Scope CurrentUser -AllowClobber
+
+      - name: Validate manifest version matches tag and publish module
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          if (-not $env:PSGALLERY_API_KEY) {
+            throw 'PSGALLERY_API_KEY secret is not configured in repository secrets.'
+          }
+
+          # Manifest is in /module
+          $manifest = Join-Path $PSScriptRoot 'module/OffsetInspect.psd1'
+
+          if (-not (Test-Path $manifest)) {
+            throw "Manifest not found at expected path: $manifest"
+          }
+
+          Write-Host "Using manifest: $manifest"
+
+          $moduleInfo = Test-ModuleManifest -Path $manifest
+
+          # Tag name is something like "v1.0.2"
+          $tag = '${{ github.ref_name }}'
+          Write-Host "Git tag: $tag"
+
+          if ($tag -notmatch '^v(?<ver>.+)$') {
+            throw "Tag '$tag' is not in expected 'vX.Y.Z' format."
+          }
+
+          $tagVersion = $Matches['ver']
+
+          Write-Host "Tag version: $tagVersion"
+          Write-Host "Manifest version: $($moduleInfo.Version)"
+
+          if ($moduleInfo.Version.ToString() -ne $tagVersion) {
+            throw "Manifest version '$($moduleInfo.Version)' does not match tag version '$tagVersion'."
+          }
+
+          # Publish the module folder to PSGallery
+          Publish-Module `
+            -Path 'module' `
+            -Repository 'PSGallery' `
+            -NuGetApiKey $env:PSGALLERY_API_KEY `
+            -Verbose
