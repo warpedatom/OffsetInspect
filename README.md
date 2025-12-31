@@ -1,17 +1,38 @@
-![Dread-Host-Banner](./assets/Dread-Host-Banner.png)
+<p align="center">
+  <img src="./assets/Dread-Host-Banner.png" alt="Dread Host Banner" width="800">
+</p>
 
-[![Release](https://img.shields.io/github/v/release/warpedatom/OffsetInspect)](https://github.com/warpedatom/OffsetInspect/releases)
-[![License](https://img.shields.io/github/license/warpedatom/OffsetInspect)](./LICENSE)
-![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2F7.x-blue)
-![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey)
-![Repo Size](https://img.shields.io/github/repo-size/warpedatom/OffsetInspect)
-![Last Commit](https://img.shields.io/github/last-commit/warpedatom/OffsetInspect)
-![Security Policy](https://img.shields.io/badge/Security-Policy-green)
-[![Use Case](https://img.shields.io/badge/Use-Red%20Team-darkred)](#use-case)
+<p align="center">
+  <a href="https://github.com/warpedatom/OffsetInspect/releases">
+    <img src="https://img.shields.io/github/v/release/warpedatom/OffsetInspect" alt="Release">
+  </a>
+  <a href="./LICENSE">
+    <img src="https://img.shields.io/github/license/warpedatom/OffsetInspect" alt="License">
+  </a>
+  <img src="https://img.shields.io/badge/PowerShell-5.1%2F7.x-blue" alt="PowerShell Support">
+  <img src="https://img.shields.io/badge/Platform-Windows-lightgrey" alt="Platform">
+  <img src="https://img.shields.io/github/repo-size/warpedatom/OffsetInspect" alt="Repo Size">
+  <img src="https://img.shields.io/github/last-commit/warpedatom/OffsetInspect" alt="Last Commit">
+  <img src="https://img.shields.io/badge/Security-Policy-green" alt="Security Policy">
+  <img src="https://img.shields.io/badge/Use-Red%20Team-darkred" alt="Use Case">
+  <a href="https://www.powershellgallery.com/packages/OffsetInspect">
+    <img src="https://img.shields.io/powershellgallery/v/OffsetInspect?color=blue&label=PSGallery" alt="PowerShell Gallery Version">
+  </a>
+  <a href="https://www.powershellgallery.com/packages/OffsetInspect">
+    <img src="https://img.shields.io/powershellgallery/dt/OffsetInspect?label=downloads" alt="Downloads">
+  </a>
+  <a href="https://github.com/warpedatom/OffsetInspect/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/warpedatom/OffsetInspect/ci.yml?label=CI" alt="CI Status">
+  </a>
+</p>
 
-![PowerShell Gallery](https://img.shields.io/powershellgallery/v/OffsetInspect?color=blue&label=PSGallery)
-![PSGallery Downloads](https://img.shields.io/powershellgallery/dt/OffsetInspect?label=downloads)
-[![CI](https://img.shields.io/github/actions/workflow/status/warpedatom/OffsetInspect/ci.yml?label=CI)](https://github.com/warpedatom/OffsetInspect/actions/workflows/ci.yml)
+<p align="center">
+  <a href="https://www.powershellgallery.com/packages/OffsetInspect">
+    <img src="https://img.shields.io/badge/Install-Install--Module%20OffsetInspect-blue?logo=powershell">
+  </a>
+</p>
+
+---
 
 # OffsetInspect
 
