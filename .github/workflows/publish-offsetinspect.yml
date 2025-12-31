@@ -1,0 +1,43 @@
+name: Publish OffsetInspect to PowerShell Gallery
+
+on:
+  # Manual trigger from the Actions tab (safe while we test)
+  workflow_dispatch:
+
+jobs:
+  test-and-publish:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PowerShell modules (Pester + PowerShellGet)
+        shell: pwsh
+        run: |
+          Install-Module PowerShellGet -Force -Scope CurrentUser -AllowClobber
+          Install-Module Pester -Force -Scope CurrentUser -AllowClobber
+
+      - name: Run Pester tests
+        shell: pwsh
+        run: |
+          Invoke-Pester -Path .\tests -EnableExit
+
+      - name: Publish OffsetInspect to PowerShell Gallery
+        if: success()   # only if tests passed
+        shell: pwsh
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # Path to your module folder containing OffsetInspect.psd1 / .psm1
+          $modulePath = Join-Path $PWD 'module'
+
+          Write-Host "Publishing module from: $modulePath"
+
+          Publish-Module `
+            -Path        $modulePath `
+            -Repository  'PSGallery' `
+            -NuGetApiKey $env:PSGALLERY_API_KEY `
+            -Verbose
