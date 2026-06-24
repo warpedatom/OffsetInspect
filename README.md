@@ -1,3 +1,4 @@
+````markdown
 <p align="center">
   <img src="./assets/Dread-Host-Banner.png" alt="Dread Host Banner" width="800">
 </p>
@@ -13,53 +14,45 @@
   <img src="https://img.shields.io/badge/Platform-Windows-lightgrey" alt="Platform">
   <img src="https://img.shields.io/github/repo-size/warpedatom/OffsetInspect" alt="Repo Size">
   <img src="https://img.shields.io/github/last-commit/warpedatom/OffsetInspect" alt="Last Commit">
+  <img src="https://img.shields.io/github/actions/workflow/status/warpedatom/OffsetInspect/ci.yml?label=CI" alt="CI Status">
   <img src="https://img.shields.io/badge/Security-Policy-green" alt="Security Policy">
   <img src="https://img.shields.io/badge/Use-Red%20Team-darkred" alt="Use Case">
-  <a href="https://www.powershellgallery.com/packages/OffsetInspect">
-    <img src="https://img.shields.io/powershellgallery/v/OffsetInspect?color=blue&label=PSGallery" alt="PowerShell Gallery Version">
-  </a>
-  <a href="https://www.powershellgallery.com/packages/OffsetInspect">
-    <img src="https://img.shields.io/powershellgallery/dt/OffsetInspect?label=downloads" alt="Downloads">
-  </a>
-  <a href="https://github.com/warpedatom/OffsetInspect/actions/workflows/ci.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/warpedatom/OffsetInspect/ci.yml?label=CI" alt="CI Status">
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://www.powershellgallery.com/packages/OffsetInspect">
-    <img src="https://img.shields.io/badge/Install-Install--Module%20OffsetInspect-blue?logo=powershell">
-  </a>
 </p>
 
 ---
 
 # OffsetInspect
 
+**PowerShell-based offset inspection utility for malware analysis, detection engineering, reverse engineering, and red team research.**
+
+OffsetInspect maps raw byte offsets back to meaningful source code and binary context, helping analysts quickly determine what exists at a reported detection location.
+
 ---
 
 ## Overview
 
-OffsetInspect is a lightweight PowerShell-based hex-context inspection utility designed for red team operators, malware analysts, and security researchers who require precise insight into file offsets.
+OffsetInspect is a lightweight PowerShell-based hex-context inspection utility designed for red team operators, malware analysts, detection engineers, and security researchers who require precise insight into file offsets.
 
 It functions as a terminal-native, HxD-inspired viewer that:
 
-- Highlights the byte located at a specified offset  
-- Displays surrounding context bytes  
-- Maps raw offsets back to file line numbers  
-- Shows aligned ASCII representations  
-- Positions a caret indicating the **approximate** character location within a source line  
-- Provides configurable context window sizes  
+- Highlights the byte located at a specified offset
+- Displays surrounding context bytes
+- Maps raw offsets back to file line numbers
+- Shows aligned ASCII representations
+- Positions a caret indicating the approximate character location within a source line
+- Provides configurable context window sizes
+- Supports inspection across multiple files
 
-OffsetInspect is intended for fast, accurate validation of static indicators during offensive security operations and detection research.
+OffsetInspect is intended for fast, accurate validation of static indicators during offensive security operations, malware analysis, and detection research.
 
 ---
 
 ## Why OffsetInspect Exists
 
-During red team operations and detection engineering, analysts frequently encounter detections that reference **raw byte offsets** rather than readable source context.
+During red team operations and detection engineering, analysts frequently encounter detections that reference raw byte offsets rather than readable source context.
 
 GUI hex editors provide visibility, but they often lack:
+
 - Scriptability
 - Repeatability
 - Terminal-first workflows
@@ -67,22 +60,39 @@ GUI hex editors provide visibility, but they often lack:
 
 OffsetInspect bridges this gap by enabling operators to quickly answer a critical question:
 
-> *What is actually at this offset?*
+> What is actually at this offset?
 
 The tool is deliberately scoped to inspection and validation, allowing analysts to correlate byte-level indicators back to meaningful source constructs without abstraction or side effects.
 
 ---
 
+## Real-World Security Workflow
+
+OffsetInspect is commonly used when:
+
+- Microsoft Defender reports a byte offset
+- A YARA rule triggers on a binary
+- A static AV detection references a specific location
+- An obfuscation change shifts offsets
+- A payload requires validation after modification
+- Detection engineers need to understand exactly what triggered an alert
+
+Instead of manually opening a hex editor and searching for a location, OffsetInspect provides terminal-native inspection and source correlation.
+
+---
+
 ## Features
 
-- Exact byte highlighting at user-specified offsets  
+- Exact byte highlighting at user-specified offsets
 - Mapping of raw offsets to file line numbers
-- Check multiple files at once  
-- Configurable byte window size  
-- Structured hex + ASCII output  
-- Color-coded terminal rendering for clarity  
-- Read-only operation with no external dependencies  
-- Compatible with Windows PowerShell 5.1 and PowerShell 7  
+- Multi-file inspection support
+- Configurable byte window size
+- Structured hex + ASCII output
+- Color-coded terminal rendering
+- Read-only operation
+- No external dependencies
+- Windows PowerShell 5.1 support
+- PowerShell 7.x support
 
 ---
 
@@ -92,37 +102,29 @@ The tool is deliberately scoped to inspection and validation, allowing analysts 
 
 ---
 
-## Download the Latest Release
+## Installation
+
+### Clone Repository
+
+```powershell
+git clone https://github.com/warpedatom/OffsetInspect.git
+cd OffsetInspect
+````
+
+### Latest Release
 
 https://github.com/warpedatom/OffsetInspect/releases/latest
 
 ---
 
-## Installation
-
-Clone the repository:
-
-```powershell
-git clone https://github.com/warpedatom/OffsetInspect.git
-cd OffsetInspect
-```
-
----
-
 ## Integrity Verification
 
-All releases include an automatically generated checksums.txt file created by GitHub Actions.
+All releases include an automatically generated checksum file.
 
-Verify using:
+Verify a downloaded release using:
+
 ```powershell
 Get-FileHash -Algorithm SHA256 .\OffsetInspect.ps1
-```
-
----
-
-Run
-```powershell
-.\OffsetInspect.ps1 <FilePath> <Offset>
 ```
 
 ---
@@ -130,34 +132,54 @@ Run
 ## PowerShell Script Usage
 
 Basic Example:
+
 ```powershell
 .\OffsetInspect.ps1 C:\AD\PowerView.ps1 0xE1AB1
 ```
 
 Decimal Offset Example:
+
 ```powershell
 .\OffsetInspect.ps1 payload.bin 1024
 ```
+
 Adjust Byte Window Size:
+
 ```powershell
 .\OffsetInspect.ps1 file.bin 0x200 -ByteWindow 64
+```
+
+Inspect Multiple Files:
+
+```powershell
+.\OffsetInspect.ps1 `
+    -FilePaths file1.bin,file2.bin `
+    -OffsetInputs 0x100
 ```
 
 ---
 
 ## PowerShell Module Usage
 
-OffsetInspect can also be used as an importable module:
+Import the module:
+
 ```powershell
 Import-Module ./module/OffsetInspect.psm1
 ```
-Invoke-OffsetInspect -FilePath C:\AD\PowerView.ps1 -OffsetInput 0xE1AB1
+
+Run inspection through the module:
+
+```powershell
+Invoke-OffsetInspect `
+    -FilePaths C:\AD\PowerView.ps1 `
+    -OffsetInputs 0xE1AB1
+```
 
 ---
 
 ## Output Explanation
 
-File Information
+### File Information
 
 ```powershell
 File:              C:\AD\PowerView.ps1
@@ -166,77 +188,73 @@ Offset (decimal):  924337
 File Size:         924339 bytes
 Line Number:       24810
 ```
-- Displays metadata for the inspected file
 
-- Normalizes and converts the provided offset
+Displays:
 
-- Maps the raw byte offset back to a source line
+* File metadata
+* Normalized offset values
+* Decimal conversion
+* File size
+* Source line correlation
 
 ---
 
-## Line Content Preview
+### Line Content Preview
+
 ```powershell
 Line 24810: Set-Alias Get-DomainPolicy Get-DomainPolicyData
                        ^
 ```
-- Prints the full source line containing the target byte
 
-- The caret indicates the approximate character position corresponding to the offset
+Displays:
 
-- Useful for quickly identifying affected strings, aliases, or instructions
-
+* The source line containing the target byte
+* Approximate byte-to-character position
+* Immediate source context
 
 > Note: Offsets are byte-based while source lines are character-based. The caret represents a best-effort positional mapping.
 
 ---
 
-```powershell
-Hex Dump
+### Hex Dump
 
+```text
 000E1A91  6F 6D 61 69 6E 50 6F 6C 69 63 79 20 47 65 74 2D   omainPolicy Get-
 000E1AA1  44 6F 6D 61 69 6E 50 6F 6C 69 63 79 44 61 74 61   DomainPolicyData
 000E1AB1  0D 0A                                                ..
 ```
-- Contextual hex dump centered around the inspected offset
 
-- Offsets displayed as eight-digit hexadecimal values
+Displays:
 
-- Target byte is visually highlighted in supported terminals
-
-- Surrounding bytes rendered in a secondary color
-
-- ASCII output aligned to the right for readability
-
+* Contextual hex dump centered on the target offset
+* Eight-digit hexadecimal addresses
+* Highlighted target byte
+* ASCII representation
+* Aligned terminal output
 
 ---
 
-## Intended Use Cases
-
-OffsetInspect is well suited for:
-
-- Red team operations
-- Malware analysis and reverse engineering
-- Script and payload debugging
-- Identifying offset-based indicators
-- Inspecting PE, binary, shellcode, PowerShell, or encoded data
-- Forensic analysis of embedded byte sequences
-- Low-level troubleshooting during security research
-
----
-
-## Detection & Adversary Simulation Use
+## Detection Engineering & Research
 
 OffsetInspect supports workflows where precision matters more than automation.
 
 Common scenarios include:
 
-- Investigating static detections referencing byte offsets
-- Validating offset drift after obfuscation or packing
-- Identifying which semantic construct triggers detection
-- Performing targeted modifications rather than blind mutation
-
+* Investigating static detections referencing byte offsets
+* Validating offset drift after obfuscation or packing
+* Identifying which semantic construct triggers detection
+* Performing targeted modifications instead of blind mutation
+* Comparing detection behavior across payload revisions
 
 This enables operators to preserve functionality while testing detection resilience.
+
+---
+
+## Workflow Reference
+
+For a complete static detection and obfuscation workflow:
+
+[PowerView Static Detection & Obfuscation Workflow](./docs/PowerView-Static-Detection-Analysis-and-Obfuscation-Workflow.pdf)
 
 ---
 
@@ -244,36 +262,52 @@ This enables operators to preserve functionality while testing detection resilie
 
 OffsetInspect is intentionally:
 
-- Terminal-native
-- Read-only
-- Dependency-free
-- Focused on accuracy over abstraction
-
+* Terminal-native
+* Read-only
+* Dependency-free
+* Lightweight
+* Scriptable
+* Focused on accuracy over abstraction
 
 It is designed to complement existing tooling such as:
 
-- YARA rules
-- Static AV/EDR detections
-- Obfuscators and packers
-- Reverse engineering workflows
+* YARA
+* Static AV/EDR detections
+* Obfuscators
+* Packers
+* Reverse engineering workflows
 
 ---
 
-## Future Work / Roadmap
+## Future Roadmap
 
 Planned enhancements under consideration:
 
-- Support for inspecting multiple offsets in a single invocation
-- Offset range diffing between two files
-- Improved handling of non-ASCII encodings
-- Optional structured output (JSON) for pipeline integration
-- Optional symbol or function boundary hints when available
+* JSON output mode
+* CSV export support
+* Improved Unicode handling
+* Binary diff support
+* Offset range analysis
+* Pipeline-friendly structured output
+* PowerShell Gallery publication
 
 ---
 
-## Workflow for Static Detection & Obfuscation of Programmable Executable
+## Testing
 
-[PowerView Static Detection & Obfuscation Workflow](./docs/PowerView-Static-Detection-Analysis-and-Obfuscation-Workflow.pdf)
+Run the Pester test suite from the repository root:
+
+```powershell
+Invoke-Pester ./tests/OffsetInspect.Tests.ps1
+```
+
+---
+
+## Project Status
+
+OffsetInspect is actively maintained and intended for authorized security research, malware analysis, detection engineering, and red team operations.
+
+Community feedback, bug reports, and pull requests are welcome.
 
 ---
 
@@ -297,13 +331,4 @@ Attribution is appreciated but not required.
   <sub>© 2025 Velkris — Educational Red Team Research | MIT Licensed</sub><br>
   <sub>All testing conducted in isolated lab environments for research and training purposes only.</sub>
 </p>
-
-
-## Testing
-
-Run the Pester test suite from the repository root:
-
-```powershell
-Invoke-Pester ./tests/OffsetInspect.Tests.ps1
 ```
-
