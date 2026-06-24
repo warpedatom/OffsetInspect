@@ -1,4 +1,3 @@
-````markdown
 <p align="center">
   <img src="./assets/Dread-Host-Banner.png" alt="Dread Host Banner" width="800">
 </p>
@@ -14,7 +13,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-lightgrey" alt="Platform">
   <img src="https://img.shields.io/github/repo-size/warpedatom/OffsetInspect" alt="Repo Size">
   <img src="https://img.shields.io/github/last-commit/warpedatom/OffsetInspect" alt="Last Commit">
-  <img src="https://img.shields.io/github/actions/workflow/status/warpedatom/OffsetInspect/ci.yml?label=CI" alt="CI Status">
+  <img src="https://img.shields.io/github/actions/workflow/status/warpedatom/OffsetInspect/ci.yml?branch=main&label=CI" alt="CI Status">
   <img src="https://img.shields.io/badge/Security-Policy-green" alt="Security Policy">
   <img src="https://img.shields.io/badge/Use-Red%20Team-darkred" alt="Use Case">
 </p>
@@ -29,19 +28,25 @@ OffsetInspect maps raw byte offsets back to meaningful source code and binary co
 
 ---
 
+## Screenshot
+
+![OffsetInspect Screenshot](./assets/OffsetInspectScreen.png)
+
+---
+
 ## Overview
 
 OffsetInspect is a lightweight PowerShell-based hex-context inspection utility designed for red team operators, malware analysts, detection engineers, and security researchers who require precise insight into file offsets.
 
 It functions as a terminal-native, HxD-inspired viewer that:
 
-- Highlights the byte located at a specified offset
-- Displays surrounding context bytes
-- Maps raw offsets back to file line numbers
-- Shows aligned ASCII representations
-- Positions a caret indicating the approximate character location within a source line
-- Provides configurable context window sizes
-- Supports inspection across multiple files
+* Highlights the byte located at a specified offset
+* Displays surrounding context bytes
+* Maps raw offsets back to file line numbers
+* Shows aligned ASCII representations
+* Positions a caret indicating the approximate character location within a source line
+* Provides configurable context window sizes
+* Supports inspection across multiple files
 
 OffsetInspect is intended for fast, accurate validation of static indicators during offensive security operations, malware analysis, and detection research.
 
@@ -53,10 +58,10 @@ During red team operations and detection engineering, analysts frequently encoun
 
 GUI hex editors provide visibility, but they often lack:
 
-- Scriptability
-- Repeatability
-- Terminal-first workflows
-- Fast offset-to-line correlation
+* Scriptability
+* Repeatability
+* Terminal-first workflows
+* Fast offset-to-line correlation
 
 OffsetInspect bridges this gap by enabling operators to quickly answer a critical question:
 
@@ -70,12 +75,12 @@ The tool is deliberately scoped to inspection and validation, allowing analysts 
 
 OffsetInspect is commonly used when:
 
-- Microsoft Defender reports a byte offset
-- A YARA rule triggers on a binary
-- A static AV detection references a specific location
-- An obfuscation change shifts offsets
-- A payload requires validation after modification
-- Detection engineers need to understand exactly what triggered an alert
+* Microsoft Defender reports a byte offset
+* A YARA rule triggers on a binary
+* A static AV detection references a specific location
+* An obfuscation change shifts offsets
+* A payload requires validation after modification
+* Detection engineers need to understand exactly what triggered an alert
 
 Instead of manually opening a hex editor and searching for a location, OffsetInspect provides terminal-native inspection and source correlation.
 
@@ -83,22 +88,16 @@ Instead of manually opening a hex editor and searching for a location, OffsetIns
 
 ## Features
 
-- Exact byte highlighting at user-specified offsets
-- Mapping of raw offsets to file line numbers
-- Multi-file inspection support
-- Configurable byte window size
-- Structured hex + ASCII output
-- Color-coded terminal rendering
-- Read-only operation
-- No external dependencies
-- Windows PowerShell 5.1 support
-- PowerShell 7.x support
-
----
-
-## Screenshot
-
-![OffsetInspect Screenshot](./assets/OffsetInspectScreen.png)
+* Exact byte highlighting at user-specified offsets
+* Mapping of raw offsets to file line numbers
+* Multi-file inspection support
+* Configurable byte window size
+* Structured hex + ASCII output
+* Color-coded terminal rendering
+* Read-only operation
+* No external dependencies
+* Windows PowerShell 5.1 support
+* PowerShell 7.x support
 
 ---
 
@@ -109,11 +108,13 @@ Instead of manually opening a hex editor and searching for a location, OffsetIns
 ```powershell
 git clone https://github.com/warpedatom/OffsetInspect.git
 cd OffsetInspect
-````
+```
 
 ### Latest Release
 
-https://github.com/warpedatom/OffsetInspect/releases/latest
+Download the latest version here:
+
+[Latest Release](https://github.com/warpedatom/OffsetInspect/releases/latest)
 
 ---
 
@@ -131,25 +132,25 @@ Get-FileHash -Algorithm SHA256 .\OffsetInspect.ps1
 
 ## PowerShell Script Usage
 
-Basic Example:
+Basic example:
 
 ```powershell
 .\OffsetInspect.ps1 C:\AD\PowerView.ps1 0xE1AB1
 ```
 
-Decimal Offset Example:
+Decimal offset example:
 
 ```powershell
 .\OffsetInspect.ps1 payload.bin 1024
 ```
 
-Adjust Byte Window Size:
+Adjust byte window size:
 
 ```powershell
 .\OffsetInspect.ps1 file.bin 0x200 -ByteWindow 64
 ```
 
-Inspect Multiple Files:
+Inspect multiple files:
 
 ```powershell
 .\OffsetInspect.ps1 `
@@ -181,7 +182,7 @@ Invoke-OffsetInspect `
 
 ### File Information
 
-```powershell
+```text
 File:              C:\AD\PowerView.ps1
 Offset (input):    0xE1AB1
 Offset (decimal):  924337
@@ -201,7 +202,7 @@ Displays:
 
 ### Line Content Preview
 
-```powershell
+```text
 Line 24810: Set-Alias Get-DomainPolicy Get-DomainPolicyData
                        ^
 ```
@@ -328,7 +329,6 @@ Attribution is appreciated but not required.
 ---
 
 <p align="center">
-  <sub>© 2025 Velkris — Educational Red Team Research | MIT Licensed</sub><br>
+  <sub>© 2026 Velkris — Educational Red Team Research | MIT Licensed</sub><br>
   <sub>All testing conducted in isolated lab environments for research and training purposes only.</sub>
 </p>
-```
