@@ -297,3 +297,13 @@ Attribution is appreciated but not required.
   <sub>© 2025 Velkris — Educational Red Team Research | MIT Licensed</sub><br>
   <sub>All testing conducted in isolated lab environments for research and training purposes only.</sub>
 </p>
+
+
+## Testing
+
+Run the Pester test suite from the repository root:
+
+```powershell
+Invoke-Pester ./tests/OffsetInspect.Tests.ps1
+```
+
