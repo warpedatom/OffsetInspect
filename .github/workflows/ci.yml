@@ -19,7 +19,10 @@ jobs:
       - name: Install PSScriptAnalyzer
         shell: pwsh
         run: |
-          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+              Register-PSRepository -Default
+          }
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
           Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force -AllowClobber
           Import-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Force
       - name: Analyze repository
@@ -41,7 +44,10 @@ jobs:
       - name: Install Pester
         shell: pwsh
         run: |
-          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+              Register-PSRepository -Default
+          }
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
           Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -AllowClobber
           Import-Module Pester -RequiredVersion 5.7.1 -Force
       - name: Run Pester
@@ -62,7 +68,10 @@ jobs:
         shell: powershell
         run: |
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+              Register-PSRepository -Default
+          }
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
           Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -AllowClobber
           Import-Module Pester -RequiredVersion 5.7.1 -Force
       - name: Run Pester
@@ -83,7 +92,10 @@ jobs:
       - name: Install build dependencies
         shell: pwsh
         run: |
-          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+              Register-PSRepository -Default
+          }
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
           Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -AllowClobber
           Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force -AllowClobber
           Import-Module Pester -RequiredVersion 5.7.1 -Force
