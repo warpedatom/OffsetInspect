@@ -15,7 +15,7 @@ jobs:
     name: PSScriptAnalyzer
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install PSScriptAnalyzer
         shell: pwsh
         run: |
@@ -37,7 +37,7 @@ jobs:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Pester
         shell: pwsh
         run: |
@@ -57,7 +57,7 @@ jobs:
     name: Windows PowerShell 5.1
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Pester
         shell: powershell
         run: |
@@ -79,7 +79,7 @@ jobs:
     needs: [lint, test-pwsh, test-windows-powershell]
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install build dependencies
         shell: pwsh
         run: |
