@@ -1,81 +1,59 @@
-# Security Policy
+# Security policy
 
-## Supported Versions
+## Supported versions
 
-OffsetInspect is currently supported under the following versioning policy:
+| Version | Security support |
+|---|---|
+| 2.x | Supported |
+| 1.x | End of life |
+| < 1.0 | Unsupported |
 
-| Version | Supported |
-|---------|-----------|
-| v1.x.x  | Yes       |
-| < v1.0.0 | No       |
+Security fixes are released against the latest 2.x version. Upgrade before reporting an issue that may already be resolved.
 
-Only the latest minor and patch releases will receive security-related updates.
+## Reporting a vulnerability
 
----
+Use GitHub Private Vulnerability Reporting for this repository or email **warped.atom@proton.me**. Do not disclose a suspected vulnerability, sensitive sample, provider output, or proof of concept in a public issue.
 
-## Reporting a Vulnerability
+Include, when possible:
 
-If you discover a security vulnerability in OffsetInspect, please follow the responsible disclosure process outlined below.
+- Affected OffsetInspect and PowerShell versions.
+- Operating system and architecture.
+- Minimal reproduction steps.
+- Expected and observed behavior.
+- Security impact and realistic attack preconditions.
+- Sanitized logs or a non-sensitive reproducer.
 
-### How to Report
+## Response targets
 
-- Email: **warped.atom@proton.me** (recommended for confidential reports)
-- GitHub: Use **Private Vulnerability Reporting** on this repository
-- Do **not** submit vulnerabilities through public issues or pull requests
+| Stage | Target |
+|---|---:|
+| Acknowledgment | 2 business days |
+| Initial triage | 5 business days |
+| Remediation decision | 10 business days |
+| Coordinated release | As soon as a validated fix is available |
 
-### What to Include
+Targets are not guarantees, but good-faith status updates will be provided during coordinated disclosure.
 
-When reporting a vulnerability, please include:
+## In scope
 
-- Description of the issue  
-- Steps to reproduce  
-- Attack scenario or potential impact  
-- Version of the tool affected  
-- Any supporting proof-of-concept material  
+- Arbitrary command or code execution caused by parsing attacker-controlled input.
+- Path handling, temporary-file, or symlink issues that cross a trust boundary.
+- Incorrect provider-state handling that reports an error or timeout as a definitive result.
+- Secret leakage through logs, CI, packaging, or release automation.
+- Supply-chain tampering or unexpected executable content in published artifacts.
+- Unsafe cleanup or file replacement outside the intended temporary workspace.
 
-### Response Timeline
+## Out of scope
 
-| Stage | Expected Time |
-|-------|----------------|
-| Acknowledgment of receipt | 48 hours |
-| Initial assessment        | 3–5 days |
-| Remediation plan          | Within 7 days |
-| Fix release (if applicable) | As soon as validated |
+- Vulnerabilities in PowerShell, Windows, AMSI, Microsoft Defender, or third-party platforms themselves.
+- Detection quality changes caused solely by provider or signature updates.
+- Running modified forks or using the tool outside an authorized environment.
+- Publicly disclosed reports submitted before a reasonable remediation window.
 
-You will be updated throughout the remediation process.
+## Release integrity
 
----
+Official release artifacts include a SHA-256 checksum. Validate the checksum before use and install Gallery releases only from the expected publisher. The module package intentionally excludes executables, compiled libraries, PDBs, IDE state, and build directories.
 
-## Scope
+## Handling samples safely
 
-In-scope security concerns include:
-
-- Arbitrary code execution caused by OffsetInspect  
-- Malicious input handling  
-- Incorrect permission escalation within the tool  
-- Supply-chain risks (e.g., tampering of release binaries)  
-
-Out-of-scope items include:
-
-- Social engineering attacks  
-- Issues caused by improper end-user environment configuration  
-- PowerShell interpreter vulnerabilities  
-
----
-
-## Coordinated Disclosure
-
-If a vulnerability is confirmed, OffsetInspect will:
-
-1. Assign a CVE (if applicable)  
-2. Patch the issue  
-3. Publish an advisory  
-4. Credit the reporter (optional)  
-
----
-
-## Best Practices for Users
-
-- Always verify SHA-256 hashes of downloaded scripts  
-- Avoid running the tool on untrusted files without sandboxing  
-- Use PowerShell Constrained Language Mode or JEA when applicable  
+OffsetInspect does not execute inspected content. Threat-provider analysis can still trigger endpoint-security controls when temporary prefixes are written or scanned. Use an authorized, isolated Windows analysis environment for suspicious samples, preserve hashes and provider metadata, and never upload sensitive samples to public issue trackers.

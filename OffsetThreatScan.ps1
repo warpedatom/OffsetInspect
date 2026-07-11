@@ -1,36 +1,46 @@
 <#
 .SYNOPSIS
-    Command-line wrapper for the OffsetInspect module.
+    Command-line wrapper for OffsetInspect threat-boundary analysis.
 .DESCRIPTION
-    Imports the repository-local module, invokes Invoke-OffsetInspect, and returns a process
-    exit code suitable for shells and CI. Import the module directly when calling from another
-    PowerShell session so errors can be handled without terminating the host process.
+    Imports the repository-local module, invokes Invoke-OffsetThreatScan, and returns a process
+    exit code suitable for shells and CI. Threat-provider scanning is Windows-only.
 #>
 [CmdletBinding(DefaultParameterSetName = 'Human')]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
     [ValidateNotNullOrEmpty()]
-    [Alias('FilePath')]
-    [string[]]$FilePaths,
+    [string]$FilePath,
 
-    [Parameter(Mandatory = $true, Position = 1)]
-    [ValidateNotNullOrEmpty()]
-    [Alias('OffsetInput', 'Offsets')]
-    [string[]]$OffsetInputs,
+    [ValidateSet('Auto', 'AMSI', 'Defender')]
+    [string]$Engine = 'Auto',
 
-    [ValidateRange(0, 4096)]
-    [int]$ByteWindow = 32,
-
-    [ValidateRange(0, 100)]
-    [int]$ContextLines = 3,
+    [ValidateSet('Auto', 'RawBytes', 'Text')]
+    [string]$ScanMode = 'Auto',
 
     [ValidateSet('Auto', 'Default', 'UTF8', 'UTF16LE', 'UTF16BE', 'ASCII')]
     [string]$Encoding = 'Auto',
 
-    [string]$CompareFile,
+    [ValidateRange(1, 10)]
+    [int]$RepeatCount = 2,
+
+    [ValidateRange(1, 600)]
+    [int]$TimeoutSeconds = 30,
+
+    [ValidateRange(0, 4096)]
+    [int]$ByteWindow = 64,
+
+    [ValidateRange(0, 100)]
+    [int]$ContextLines = 3,
 
     [ValidateRange(1024, 16777216)]
     [int]$MaxLineBytes = 1048576,
+
+    [ValidateScript({ $_ -ge 1 })]
+    [int64]$MaxScanBytes = 268435456,
+
+    [switch]$Force,
+    [switch]$NoProgress,
+    [switch]$IncludeProviderOutput,
 
     [Parameter(Mandatory = $true, ParameterSetName = 'Object')]
     [switch]$PassThru,
@@ -55,7 +65,7 @@ try {
         $arguments[$name] = $PSBoundParameters[$name]
     }
     $arguments.FailOnError = $true
-    Invoke-OffsetInspect @arguments
+    Invoke-OffsetThreatScan @arguments
     exit 0
 }
 catch {

@@ -1,334 +1,284 @@
 <p align="center">
-  <img src="./assets/Dread-Host-Banner.png" alt="Dread Host Banner" width="800">
+  <img src="./assets/Dread-Host-Banner.png" alt="Dread Host Research" width="800">
 </p>
 
 <p align="center">
-  <a href="https://github.com/warpedatom/OffsetInspect/releases">
-    <img src="https://img.shields.io/github/v/release/warpedatom/OffsetInspect" alt="Release">
-  </a>
-  <a href="./LICENSE">
-    <img src="https://img.shields.io/github/license/warpedatom/OffsetInspect" alt="License">
-  </a>
-  <img src="https://img.shields.io/badge/PowerShell-5.1%2F7.x-blue" alt="PowerShell Support">
-  <img src="https://img.shields.io/badge/Platform-Windows-lightgrey" alt="Platform">
-  <img src="https://img.shields.io/github/repo-size/warpedatom/OffsetInspect" alt="Repo Size">
-  <img src="https://img.shields.io/github/last-commit/warpedatom/OffsetInspect" alt="Last Commit">
-  <img src="https://img.shields.io/github/actions/workflow/status/warpedatom/OffsetInspect/ci.yml?branch=main&label=CI" alt="CI Status">
-  <img src="https://img.shields.io/badge/Security-Policy-green" alt="Security Policy">
-  <img src="https://img.shields.io/badge/Use-Red%20Team-darkred" alt="Use Case">
+  <a href="https://github.com/warpedatom/OffsetInspect/releases"><img src="https://img.shields.io/github/v/release/warpedatom/OffsetInspect" alt="Release"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/warpedatom/OffsetInspect" alt="License"></a>
+  <img src="https://img.shields.io/badge/PowerShell-5.1%20%7C%207.x-5391FE" alt="PowerShell 5.1 and 7.x">
+  <img src="https://img.shields.io/badge/Core-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Cross-platform core">
+  <img src="https://img.shields.io/badge/Threat%20Providers-Windows-0078D4" alt="Windows threat providers">
+  <img src="https://img.shields.io/github/actions/workflow/status/warpedatom/OffsetInspect/ci.yml?branch=main&label=CI" alt="CI">
+  <a href="./SECURITY.md"><img src="https://img.shields.io/badge/Security-Policy-green" alt="Security policy"></a>
 </p>
-
----
 
 # OffsetInspect
 
-**PowerShell-based offset inspection utility for malware analysis, detection engineering, reverse engineering, and red team research.**
+**A bounded-memory PowerShell toolkit for byte-offset inspection, source correlation, binary comparison, and defensive detection-boundary analysis.**
 
-OffsetInspect maps raw byte offsets back to meaningful source code and binary context, helping analysts quickly determine what exists at a reported detection location.
+OffsetInspect answers a practical analyst question:
 
----
+> What content is present at this byte offset, and what source or binary context surrounds it?
 
-## Screenshot
+Version 2.0 also adds an OffsetInspect-native detection-boundary workflow inspired by the same analyst problem addressed by ThreatCheck, without bundling its source or binaries. It can locate the earliest content prefix that remains detected by AMSI or Microsoft Defender, validate the boundary repeatedly, and feed the resulting offset directly into the normal context inspector.
 
-![OffsetInspect Screenshot](./assets/OffsetInspectScreen.png)
+## Highlights
 
----
-
-## Overview
-
-OffsetInspect is a lightweight PowerShell-based hex-context inspection utility designed for red team operators, malware analysts, detection engineers, and security researchers who require precise insight into file offsets.
-
-It functions as a terminal-native, HxD-inspired viewer that:
-
-* Highlights the byte located at a specified offset
-* Displays surrounding context bytes
-* Maps raw offsets back to file line numbers
-* Shows aligned ASCII representations
-* Positions a caret indicating the approximate character location within a source line
-* Provides configurable context window sizes
-* Supports inspection across multiple files
-
-OffsetInspect is intended for fast, accurate validation of static indicators during offensive security operations, malware analysis, and detection research.
-
----
-
-## Why OffsetInspect Exists
-
-During red team operations and detection engineering, analysts frequently encounter detections that reference raw byte offsets rather than readable source context.
-
-GUI hex editors provide visibility, but they often lack:
-
-* Scriptability
-* Repeatability
-* Terminal-first workflows
-* Fast offset-to-line correlation
-
-OffsetInspect bridges this gap by enabling operators to quickly answer a critical question:
-
-> What is actually at this offset?
-
-The tool is deliberately scoped to inspection and validation, allowing analysts to correlate byte-level indicators back to meaningful source constructs without abstraction or side effects.
-
----
-
-## Real-World Security Workflow
-
-OffsetInspect is commonly used when:
-
-* Microsoft Defender reports a byte offset
-* A YARA rule triggers on a binary
-* A static AV detection references a specific location
-* An obfuscation change shifts offsets
-* A payload requires validation after modification
-* Detection engineers need to understand exactly what triggered an alert
-
-Instead of manually opening a hex editor and searching for a location, OffsetInspect provides terminal-native inspection and source correlation.
-
----
-
-## Features
-
-* Exact byte highlighting at user-specified offsets
-* Mapping of raw offsets to file line numbers
-* Multi-file inspection support
-* Configurable byte window size
-* Structured hex + ASCII output
-* Color-coded terminal rendering
-* Read-only operation
-* No external dependencies
-* Windows PowerShell 5.1 support
-* PowerShell 7.x support
-
----
+- Opens each unique inspection file through a stable read handle and processes all requested offsets together.
+- Uses a bounded-memory streaming pass for line mapping instead of rereading the complete file for every offset.
+- Reads only the requested byte windows for hex output and comparison.
+- Maps UTF-8 and UTF-16 byte offsets to source lines and character positions.
+- Implements previous and following source context through `-ContextLines`.
+- Supports human, object, JSON, CSV, and CSV-file output contracts.
+- Supports one-to-many, many-to-one, and paired file/offset plans.
+- Compares the target byte against a second file without repeatedly loading that file.
+- Adds an independently implemented AMSI and Microsoft Defender provider layer with explicit error, timeout, blocked, and indeterminate states.
+- Never changes Defender exclusions, real-time protection, or system security configuration.
+- Ships as a self-contained PowerShell Gallery package.
 
 ## Installation
 
-### Clone Repository
+### PowerShell Gallery
+
+```powershell
+Install-Module OffsetInspect -Scope CurrentUser
+Import-Module OffsetInspect
+```
+
+### Repository checkout
 
 ```powershell
 git clone https://github.com/warpedatom/OffsetInspect.git
 cd OffsetInspect
+Import-Module ./module/OffsetInspect/OffsetInspect.psd1 -Force
 ```
 
-### Latest Release
-
-Download the latest version here:
-
-[Latest Release](https://github.com/warpedatom/OffsetInspect/releases/latest)
-
----
-
-## Integrity Verification
-
-All releases include an automatically generated checksum file.
-
-Verify a downloaded release using:
+The repository also includes thin CLI wrappers:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\OffsetInspect.ps1
+./OffsetInspect.ps1 <file> <offset>
+./OffsetThreatScan.ps1 <file> -Engine AMSI
 ```
 
----
+## Offset inspection
 
-## PowerShell Script Usage
-
-Basic example:
+### Human-readable output
 
 ```powershell
-.\OffsetInspect.ps1 C:\AD\PowerView.ps1 0xE1AB1
+Invoke-OffsetInspect ./sample.bin 0x200
 ```
-
-Decimal offset example:
 
 ```powershell
-.\OffsetInspect.ps1 payload.bin 1024
+$inspectParameters = @{
+    FilePaths    = './script.ps1'
+    OffsetInputs = 128, 256, 512
+    ByteWindow   = 64
+    ContextLines = 4
+}
+Invoke-OffsetInspect @inspectParameters
 ```
 
-Adjust byte window size:
+### Structured objects
 
 ```powershell
-.\OffsetInspect.ps1 file.bin 0x200 -ByteWindow 64
+$inspectParameters = @{
+    FilePaths    = './script.ps1'
+    OffsetInputs = 0x80, 0x100
+    PassThru     = $true
+}
+$results = Invoke-OffsetInspect @inspectParameters
+
+$results | Where-Object BytesDiffer
 ```
 
-Inspect multiple files:
+### JSON and CSV
 
 ```powershell
-.\OffsetInspect.ps1 `
-    -FilePaths file1.bin,file2.bin `
-    -OffsetInputs 0x100
+Invoke-OffsetInspect ./sample.bin 0x200 -Json
+Invoke-OffsetInspect ./sample.bin 0x200 -Csv
+Invoke-OffsetInspect ./sample.bin 0x200 -CsvPath ./artifacts/offsets.csv
 ```
 
----
+JSON mode always emits an array, including for a single result.
 
-## PowerShell Module Usage
-
-Import the module:
+### Binary comparison
 
 ```powershell
-Import-Module ./module/OffsetInspect.psm1
+$compareParameters = @{
+    FilePaths    = './before.bin'
+    OffsetInputs = 0x200
+    CompareFile  = './after.bin'
+    PassThru     = $true
+}
+Invoke-OffsetInspect @compareParameters
 ```
 
-Run inspection through the module:
+### Offset formats
+
+| Input | Interpretation |
+|---|---:|
+| `512` | Decimal 512 |
+| `0x200` or `0X200` | Hexadecimal 0x200 |
+| `200h` | Hexadecimal 0x200 |
+| `E1AB1` | Unprefixed hexadecimal because it contains A-F |
+
+Numeric-only values without a prefix or suffix are intentionally treated as decimal.
+
+### Encoding modes
+
+| Mode | Behavior |
+|---|---|
+| `Auto` | Detects UTF-8/UTF-16 BOMs; otherwise uses UTF-8 |
+| `Default` | Uses the host operating system default encoding |
+| `UTF8` | UTF-8 source mapping |
+| `UTF16LE` | Little-endian UTF-16 source mapping |
+| `UTF16BE` | Big-endian UTF-16 source mapping |
+| `ASCII` | ASCII source mapping |
+
+The output reports both `BytePositionInLine` and `CharacterPosition`. This distinction matters when a source file contains multibyte characters.
+
+## Threat boundary analysis
+
+Threat-provider analysis is Windows-only. The normal offset inspection command remains cross-platform.
+
+### AMSI text scan
 
 ```powershell
-Invoke-OffsetInspect `
-    -FilePaths C:\AD\PowerView.ps1 `
-    -OffsetInputs 0xE1AB1
+$scanParameters = @{
+    FilePath    = './script.ps1'
+    Engine      = 'AMSI'
+    ScanMode    = 'Text'
+    RepeatCount = 3
+    PassThru    = $true
+}
+$result = Invoke-OffsetThreatScan @scanParameters
 ```
 
----
+Text mode uses `AmsiScanString`, searches Unicode-scalar prefixes without splitting surrogate pairs, maps the detected prefix through the validated source encoding, and returns Unicode-scalar, UTF-16 code-unit, and source-file byte indexes. Embedded NUL characters are rejected in text mode; use raw-byte mode for those files.
 
-## Output Explanation
+### AMSI raw-byte scan
 
-### File Information
+```powershell
+Invoke-OffsetThreatScan ./content.bin -Engine AMSI -ScanMode RawBytes
+```
+
+### Microsoft Defender scan
+
+```powershell
+$scanParameters = @{
+    FilePath       = './sample.bin'
+    Engine         = 'Defender'
+    RepeatCount    = 3
+    TimeoutSeconds = 45
+}
+Invoke-OffsetThreatScan @scanParameters
+```
+
+The Defender provider:
+
+- Resolves the newest installed `MpCmdRun.exe` platform path.
+- Writes prefixes to a unique user temporary directory.
+- Uses a custom scan with `-DisableRemediation`.
+- Treats timeouts, provider errors, localized/unknown output, and ambiguous markers as non-definitive.
+- Deletes the temporary workspace when scanning completes.
+
+### Boundary semantics
+
+A result such as `DetectionPrefixLength = 841` means:
+
+- Prefix length 840 was classified as clean/not detected.
+- Prefix length 841 was classified as detected/blocked.
+- Repeated checks determine whether that transition is stable.
+
+It does **not** prove that byte 840 is the complete signature, the only contributing byte, or the full malicious range. Antivirus decisions may depend on tokenization, surrounding context, file type, provider state, and signature updates.
+
+See [Threat scanning design](./docs/THREAT-SCANNING.md) for the provider contract and interpretation guidance, [threat-scanning provenance](./docs/PROVENANCE.md) for implementation boundaries and attribution, and [output schema](./docs/OUTPUT-SCHEMA.md) for the versioned object contract.
+
+## Result objects
+
+`Invoke-OffsetInspect -PassThru` returns `OffsetInspect.Result` objects containing:
+
+- Canonical file path, file size, decimal and hexadecimal offsets.
+- Requested and detected encoding.
+- Line number, source preview, context lines, byte position, and character position.
+- Target byte and bounded hex dump.
+- Optional comparison byte and difference state.
+- Warnings, duration, success state, and error message.
+
+`Invoke-OffsetThreatScan -PassThru` returns `OffsetInspect.ThreatScanResult` objects containing:
+
+- File SHA-256, UTC scan timestamp, engine, scan mode, initial provider status, and provider metadata.
+- Known-clean and known-detected prefix lengths.
+- Byte and optional character boundary.
+- Stability, confidence, scan count, repeated boundary statuses, and signature name when available.
+- Nested `OffsetInspect.Result` context at the mapped boundary.
+
+## Performance model
+
+The v1-style implementation reread and decoded a complete file for every offset. Version 2 groups work by file:
 
 ```text
-File:              C:\AD\PowerView.ps1
-Offset (input):    0xE1AB1
-Offset (decimal):  924337
-File Size:         924339 bytes
-Line Number:       24810
+Previous approach: approximately O(file size × offset count)
+Version 2:         approximately O(file bytes scanned once + requested windows)
 ```
 
-Displays:
+Source mapping uses a streaming state machine and retains only the previous/following line descriptors required for requested offsets. Extremely long individual lines are displayed through a bounded preview controlled by `-MaxLineBytes`.
 
-* File metadata
-* Normalized offset values
-* Decimal conversion
-* File size
-* Source line correlation
-
----
-
-### Line Content Preview
+## Repository layout
 
 ```text
-Line 24810: Set-Alias Get-DomainPolicy Get-DomainPolicyData
-                       ^
+OffsetInspect.ps1                 Thin offset-inspection CLI wrapper
+OffsetThreatScan.ps1              Thin threat-scan CLI wrapper
+module/OffsetInspect/             Complete Gallery package
+  OffsetInspect.psd1
+  OffsetInspect.psm1
+  OffsetInspect.Format.ps1xml
+  Public/
+  Private/
+tests/                            Pester tests
+benchmarks/                       Reproducible performance harness
+build/                            Validation, packaging, signing, publishing
+.github/workflows/                CI, dependency review, release publishing
+docs/                             Architecture, schemas, provider design, release checklist
 ```
 
-Displays:
+## Development
 
-* The source line containing the target byte
-* Approximate byte-to-character position
-* Immediate source context
-
-> Note: Offsets are byte-based while source lines are character-based. The caret represents a best-effort positional mapping.
-
----
-
-### Hex Dump
-
-```text
-000E1A91  6F 6D 61 69 6E 50 6F 6C 69 63 79 20 47 65 74 2D   omainPolicy Get-
-000E1AA1  44 6F 6D 61 69 6E 50 6F 6C 69 63 79 44 61 74 61   DomainPolicyData
-000E1AB1  0D 0A                                                ..
-```
-
-Displays:
-
-* Contextual hex dump centered on the target offset
-* Eight-digit hexadecimal addresses
-* Highlighted target byte
-* ASCII representation
-* Aligned terminal output
-
----
-
-## Detection Engineering & Research
-
-OffsetInspect supports workflows where precision matters more than automation.
-
-Common scenarios include:
-
-* Investigating static detections referencing byte offsets
-* Validating offset drift after obfuscation or packing
-* Identifying which semantic construct triggers detection
-* Performing targeted modifications instead of blind mutation
-* Comparing detection behavior across payload revisions
-
-This enables operators to preserve functionality while testing detection resilience.
-
----
-
-## Workflow Reference
-
-For a complete static detection and obfuscation workflow:
-
-[PowerView Static Detection & Obfuscation Workflow](./docs/PowerView-Static-Detection-Analysis-and-Obfuscation-Workflow.pdf)
-
----
-
-## Design Philosophy
-
-OffsetInspect is intentionally:
-
-* Terminal-native
-* Read-only
-* Dependency-free
-* Lightweight
-* Scriptable
-* Focused on accuracy over abstraction
-
-It is designed to complement existing tooling such as:
-
-* YARA
-* Static AV/EDR detections
-* Obfuscators
-* Packers
-* Reverse engineering workflows
-
----
-
-## Future Roadmap
-
-Planned enhancements under consideration:
-
-* JSON output mode
-* CSV export support
-* Improved Unicode handling
-* Binary diff support
-* Offset range analysis
-* Pipeline-friendly structured output
-* PowerShell Gallery publication
-
----
-
-## Testing
-
-Run the Pester test suite from the repository root:
+Install the pinned validation tools:
 
 ```powershell
-Invoke-Pester ./tests/OffsetInspect.Tests.ps1
+Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser
+Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser
 ```
 
----
+Run the complete local gate:
 
-## Project Status
+```powershell
+./build/Test-Module.ps1
+```
 
-OffsetInspect is actively maintained and intended for authorized security research, malware analysis, detection engineering, and red team operations.
+Run the deterministic benchmark harness:
 
-Community feedback, bug reports, and pull requests are welcome.
+```powershell
+./benchmarks/Measure-OffsetInspect.ps1 -FileSizeMiB 64 -OffsetCount 5000
+```
 
----
+Benchmark results vary by storage, host load, PowerShell edition, and file shape. Record those inputs when comparing commits.
 
-## Disclaimer
+Build a deterministic release archive and SHA-256 file:
 
-This tool is intended for authorized security testing, research, and educational purposes only.
+```powershell
+./build/New-ReleasePackage.ps1
+```
 
-The author assumes no responsibility for misuse, unauthorized activity, or policy violations.
+CI validates PowerShell 7 on Windows and Linux, Windows PowerShell 5.1, PSScriptAnalyzer, isolated module packaging, and the release archive. Release maintainers should also follow the [release checklist](./docs/RELEASE-CHECKLIST.md).
 
----
+## Security and responsible use
+
+OffsetInspect is intended for authorized defensive research, detection engineering, reverse engineering, malware analysis, and security testing. Threat-provider functions analyze content but do not disable, bypass, or reconfigure endpoint protections.
+
+Review [SECURITY.md](./SECURITY.md) before reporting a vulnerability. Do not submit sensitive samples through public GitHub issues.
 
 ## License
 
-OffsetInspect is released under the MIT License.
-
-Attribution is appreciated but not required.
-
----
-
-<p align="center">
-  <sub>© 2026 Velkris — Educational Red Team Research | MIT Licensed</sub><br>
-  <sub>All testing conducted in isolated lab environments for research and training purposes only.</sub>
-</p>
+OffsetInspect is released under the [MIT License](./LICENSE).
