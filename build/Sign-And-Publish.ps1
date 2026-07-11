@@ -1,42 +1,57 @@
+[CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
 param(
-    [string]$ModulePath = (Resolve-Path '..'),
-    [string]$GalleryApiKey
+    [string]$RepoRoot = (Split-Path -Parent $PSScriptRoot),
+    [SecureString]$GalleryApiKey,
+    [string]$CertificateThumbprint,
+    [switch]$SkipSigning,
+    [switch]$SkipTests
 )
 
-if (-not $GalleryApiKey) {
-    $GalleryApiKey = Read-Host -AsSecureString "Enter PSGallery API key"
+$ErrorActionPreference = 'Stop'
+$modulePath = Join-Path (Join-Path $RepoRoot 'module') 'OffsetInspect'
+$manifestPath = Join-Path $modulePath 'OffsetInspect.psd1'
+
+if (-not $SkipTests) {
+    & (Join-Path $PSScriptRoot 'Test-Module.ps1') -RepoRoot $RepoRoot
 }
 
-Write-Host "[*] Testing module manifest..."
-$manifest = Join-Path $ModulePath 'OffsetInspect.psd1'
-Test-ModuleManifest -Path $manifest | Out-Null
+if (-not $SkipSigning) {
+    $certificates = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert
+    if ($CertificateThumbprint) {
+        $certificate = $certificates | Where-Object Thumbprint -eq $CertificateThumbprint | Select-Object -First 1
+    }
+    else {
+        $certificate = $certificates | Sort-Object NotAfter -Descending | Select-Object -First 1
+    }
 
-Write-Host "[*] Importing module for sanity check..."
-Import-Module $manifest -Force
+    if ($null -eq $certificate) {
+        throw 'No matching code-signing certificate was found in Cert:\CurrentUser\My.'
+    }
 
-Write-Host "[*] Running Pester tests..."
-Invoke-Pester -Path (Join-Path $ModulePath 'tests') -Output Summary -EnableExit
+    foreach ($file in (Get-ChildItem -LiteralPath $modulePath -Recurse -File | Where-Object Extension -in @('.ps1', '.psm1', '.psd1'))) {
+        if ($PSCmdlet.ShouldProcess($file.FullName, 'Apply Authenticode signature')) {
+            $signature = Set-AuthenticodeSignature -LiteralPath $file.FullName -Certificate $certificate -HashAlgorithm SHA256
+            if ($signature.Status -ne 'Valid') {
+                throw "Signing failed for '$($file.FullName)': $($signature.StatusMessage)"
+            }
+        }
+    }
 
-Write-Host "[*] Locating code-signing certificate..."
-$cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Select-Object -First 1
-if (-not $cert) {
-    throw "No code-signing certificate found in Cert:\CurrentUser\My. Create or import one first."
+    Test-ModuleManifest -Path $manifestPath -ErrorAction Stop | Out-Null
 }
 
-$filesToSign = @(
-    'OffsetInspect.psm1',
-    'OffsetInspect.ps1'
-) | ForEach-Object { Join-Path $ModulePath $_ }
-
-foreach ($file in $filesToSign) {
-    Write-Host "[*] Signing $file"
-    Set-AuthenticodeSignature -FilePath $file -Certificate $cert | Out-String | Write-Host
+if ($null -eq $GalleryApiKey) {
+    $GalleryApiKey = Read-Host -Prompt 'PowerShell Gallery API key' -AsSecureString
 }
 
-Write-Host "[*] Publishing OffsetInspect to PSGallery..."
-Publish-Module -Path $ModulePath `
-               -Repository PSGallery `
-               -NuGetApiKey $GalleryApiKey `
-               -Verbose
-
-Write-Host "[+] Done."
+$bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($GalleryApiKey)
+try {
+    $plainGalleryApiKey = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    if ($PSCmdlet.ShouldProcess('PowerShell Gallery', "Publish OffsetInspect $((Test-ModuleManifest -Path $manifestPath).Version)")) {
+        Publish-Module -Path $modulePath -Repository PSGallery -NuGetApiKey $plainGalleryApiKey -Force -Verbose
+    }
+}
+finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    Remove-Variable -Name plainGalleryApiKey -ErrorAction SilentlyContinue
+}

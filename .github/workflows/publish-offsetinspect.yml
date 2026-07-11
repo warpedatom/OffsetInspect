@@ -1,43 +1,64 @@
-name: Publish OffsetInspect to PowerShell Gallery
+name: Publish OffsetInspect
 
 on:
-  # Manual trigger from the Actions tab (safe while we test)
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      confirm_publish:
+        description: Type PUBLISH to confirm a Gallery release
+        required: true
+        type: string
+
+permissions:
+  contents: write
 
 jobs:
-  test-and-publish:
+  publish:
+    if: github.event_name == 'release' || inputs.confirm_publish == 'PUBLISH'
     runs-on: windows-latest
-
+    environment: powershell-gallery
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install PowerShell modules (Pester + PowerShellGet)
+      - name: Install build dependencies
         shell: pwsh
         run: |
-          Install-Module PowerShellGet -Force -Scope CurrentUser -AllowClobber
-          Install-Module Pester -Force -Scope CurrentUser -AllowClobber
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -AllowClobber
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force -AllowClobber
+          Import-Module Pester -RequiredVersion 5.7.1 -Force
+          Import-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Force
+          Install-Module PowerShellGet -Scope CurrentUser -Force -AllowClobber
 
-      - name: Run Pester tests
+      - name: Validate release version
         shell: pwsh
         run: |
-          Invoke-Pester -Path .\tests -EnableExit
+          $manifest = Test-ModuleManifest ./module/OffsetInspect/OffsetInspect.psd1
+          if ('${{ github.event_name }}' -eq 'release') {
+              $tagVersion = '${{ github.event.release.tag_name }}'.TrimStart('v')
+              if ($manifest.Version.ToString() -ne $tagVersion) {
+                  throw "Manifest version $($manifest.Version) does not match release tag $tagVersion."
+              }
+          }
 
-      - name: Publish OffsetInspect to PowerShell Gallery
-        if: success()   # only if tests passed
+      - name: Test and package
+        shell: pwsh
+        run: ./build/New-ReleasePackage.ps1
+
+      - name: Publish to PowerShell Gallery
         shell: pwsh
         env:
           PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
         run: |
-          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:PSGALLERY_API_KEY)) {
+              throw 'PSGALLERY_API_KEY is not configured.'
+          }
+          Publish-Module -Path ./module/OffsetInspect -Repository PSGallery -NuGetApiKey $env:PSGALLERY_API_KEY -Verbose
 
-          # Path to your module folder containing OffsetInspect.psd1 / .psm1
-          $modulePath = Join-Path $PWD 'module'
-
-          Write-Host "Publishing module from: $modulePath"
-
-          Publish-Module `
-            -Path        $modulePath `
-            -Repository  'PSGallery' `
-            -NuGetApiKey $env:PSGALLERY_API_KEY `
-            -Verbose
+      - name: Attach artifacts to GitHub release
+        if: github.event_name == 'release'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload '${{ github.event.release.tag_name }}' ./artifacts/* --clobber
