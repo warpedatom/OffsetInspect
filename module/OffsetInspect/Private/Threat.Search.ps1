@@ -19,7 +19,7 @@ function Test-OIDefinitiveScanStatus {
     return (Test-OIPositiveScanStatus -Status $Status) -or (Test-OINegativeScanStatus -Status $Status)
 }
 
-function Invoke-OIPrefixBoundarySearch {
+function Invoke-OIPrefixBoundarySearchCore {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
@@ -34,11 +34,22 @@ function Invoke-OIPrefixBoundarySearch {
 
         [string]$Activity = 'Locating detection boundary',
 
-        [switch]$NoProgress
+        [switch]$NoProgress,
+
+        # Optional shared accumulator. When supplied, every distinct provider
+        # invocation (cache misses only) is appended as an audit record. The
+        # list is a reference type, so the search populates it in place.
+        [AllowNull()]
+        [System.Collections.Generic.List[object]]$ProbeLog
     )
 
     $scannerCallback = $Scanner
-    $cache = @{}
+    # Concurrent cache keyed by prefix length. Sequential today, but using a
+    # thread-safe map keeps the invariant honest if prefix probing is ever
+    # parallelised (see docs/PROVIDER-INTERFACE.md for the resources that must
+    # first be made per-worker before that is safe).
+    $cache = New-Object 'System.Collections.Concurrent.ConcurrentDictionary[string,object]'
+    $probeAccumulator = $ProbeLog
     $state = [pscustomobject]@{ ScanCount = 0 }
 
     $completeProgress = {
@@ -56,6 +67,7 @@ function Invoke-OIPrefixBoundarySearch {
         }
 
         $state.ScanCount++
+        $probeWatch = [System.Diagnostics.Stopwatch]::StartNew()
         try {
             $scan = & $scannerCallback $Length
             if ($null -eq $scan -or [string]::IsNullOrWhiteSpace([string]$scan.Status)) {
@@ -79,6 +91,32 @@ function Invoke-OIPrefixBoundarySearch {
                 RawOutput      = $null
             }
         }
+        $probeWatch.Stop()
+
+        $providerResultValue = $null
+        if ($null -ne $scan.PSObject.Properties['ProviderResult']) {
+            $providerResultValue = $scan.ProviderResult
+        }
+        $signatureValue = $null
+        if ($null -ne $scan.PSObject.Properties['SignatureName']) {
+            $signatureValue = $scan.SignatureName
+        }
+
+        if ($null -ne $probeAccumulator) {
+            $probeAccumulator.Add([pscustomobject]@{
+                Sequence       = $state.ScanCount
+                PrefixLength   = $Length
+                Status         = $scan.Status
+                ProviderResult = $providerResultValue
+                SignatureName  = $signatureValue
+                Cacheable      = [bool]$UseCache
+                ElapsedMs      = [Math]::Round($probeWatch.Elapsed.TotalMilliseconds, 3)
+                TimestampUtc   = [DateTime]::UtcNow.ToString('o')
+            })
+        }
+
+        Write-Verbose ("Probe #{0}: prefix={1} status={2} ({3} ms)" -f `
+            $state.ScanCount, $Length, $scan.Status, [Math]::Round($probeWatch.Elapsed.TotalMilliseconds, 3))
 
         if ($UseCache) {
             $cache[$key] = $scan
@@ -293,6 +331,50 @@ function Invoke-OIPrefixBoundarySearch {
     }
 }
 
+function Invoke-OIPrefixBoundarySearch {
+    <#
+        Public-within-module entry point. Owns the audit accumulator so that the
+        probe log is captured on every return path of the core search (success
+        or failure) without threading a new field through each return literal.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateScript({ $_ -ge 1 })]
+        [int64]$UnitCount,
+
+        [Parameter(Mandatory = $true)]
+        [scriptblock]$Scanner,
+
+        [ValidateRange(1, 10)]
+        [int]$RepeatCount = 2,
+
+        [string]$Activity = 'Locating detection boundary',
+
+        [switch]$NoProgress
+    )
+
+    $probeLog = New-Object 'System.Collections.Generic.List[object]'
+
+    $result = Invoke-OIPrefixBoundarySearchCore `
+        -UnitCount $UnitCount `
+        -Scanner $Scanner `
+        -RepeatCount $RepeatCount `
+        -Activity $Activity `
+        -NoProgress:$NoProgress `
+        -ProbeLog $probeLog
+
+    $probeArray = $probeLog.ToArray()
+    if ($null -ne $result) {
+        Add-Member -InputObject $result -NotePropertyName 'ProbeLog' -NotePropertyValue $probeArray -Force
+    }
+
+    Write-Verbose ("Boundary search issued {0} provider probe(s) across {1} distinct prefix length(s)." -f `
+        $probeArray.Count, (@($probeArray | ForEach-Object { $_.PrefixLength } | Sort-Object -Unique)).Count)
+
+    return $result
+}
+
 function ConvertTo-OIFlatThreatResult {
     [CmdletBinding()]
     param(
@@ -331,6 +413,7 @@ function ConvertTo-OIFlatThreatResult {
             Confidence               = $Result.Confidence
             ScanCount                = $Result.ScanCount
             SignatureName            = $Result.SignatureName
+            ProbeCount               = if ($null -ne $Result.PSObject.Properties['ProbeLog']) { @($Result.ProbeLog).Count } else { $null }
             FullContentStatuses       = $fullContentStatuses
             KnownCleanStatuses        = $knownCleanStatuses
             KnownDetectedStatuses     = $knownDetectedStatuses
@@ -354,6 +437,9 @@ function Write-OIHumanThreatResult {
     Write-Host "Scan mode:           $($Result.ScanMode)" -ForegroundColor Green
     Write-Host "Initial status:      $($Result.InitialStatus)" -ForegroundColor Green
     Write-Host "Scans performed:     $($Result.ScanCount)" -ForegroundColor Green
+    if ($null -ne $Result.PSObject.Properties['ProbeLog']) {
+        Write-Host "Provider probes:     $(@($Result.ProbeLog).Count) (see -Verbose or the ProbeLog property for the full audit trail)" -ForegroundColor Green
+    }
     Write-Host "Duration:            $($Result.DurationMs) ms" -ForegroundColor Green
 
     if (-not $Result.Success) {

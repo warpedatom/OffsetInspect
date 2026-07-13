@@ -36,15 +36,15 @@ AfterAll {
     Remove-Module OffsetInspect -Force -ErrorAction SilentlyContinue
 }
 Describe 'OffsetInspect module package' {
-    It 'has a valid 2.0.0 manifest' {
+    It 'has a valid 3.0.0 manifest' {
         $manifest = Test-ModuleManifest -Path $ManifestPath -ErrorAction Stop
-        $manifest.Version.ToString() | Should -Be '2.0.0'
+        $manifest.Version.ToString() | Should -Be '3.0.0'
         $manifest.RootModule | Should -Be 'OffsetInspect.psm1'
     }
 
     It 'exports only the supported public commands' {
         $commands = @(Get-Command -Module OffsetInspect | Select-Object -ExpandProperty Name | Sort-Object)
-        ($commands -join ',') | Should -Be 'Invoke-OffsetInspect,Invoke-OffsetThreatScan'
+        ($commands -join ',') | Should -Be 'Compare-OffsetThreatResult,Export-OffsetThreatReport,Get-OffsetEntropy,Get-OffsetIOC,Get-OffsetPEInfo,Get-OffsetString,Invoke-OffsetClamScan,Invoke-OffsetInspect,Invoke-OffsetThreatScan,Invoke-OffsetThreatScanBatch,Invoke-OffsetThreatScanRegion,Invoke-OffsetYaraScan'
     }
 
     It 'imports from an isolated Gallery-style folder' {
@@ -469,6 +469,22 @@ Describe 'Threat provider normalization and boundary search' {
                     -CsvPath ''
             } | Should -Throw
         }
+        It 'keeps unbound ProbeLogPath compatible with Windows PowerShell 5.1 closures' {
+            # An unbound [string] is '' under Windows PowerShell 5.1; a
+            # ValidateNotNullOrEmpty attribute on it breaks the scanner's
+            # .GetNewClosure() capture. ProbeLogPath must therefore carry no such
+            # attribute (the empty case is handled by an IsNullOrWhiteSpace guard).
+            $command = Get-Command -Name Invoke-OffsetThreatScan -ErrorAction Stop
+            $probeLogPathParameter = $command.Parameters['ProbeLogPath']
+            $incompatibleAttributes = @(
+                $probeLogPathParameter.Attributes |
+                    Where-Object {
+                        $_.GetType().FullName -eq
+                            'System.Management.Automation.ValidateNotNullOrEmptyAttribute'
+                    }
+            )
+            $incompatibleAttributes.Count | Should -Be 0
+        }
         It 'binds module-private helper commands into provider closures' {
             $moduleBase = `
                 $ExecutionContext.SessionState.Module.ModuleBase
@@ -794,5 +810,786 @@ Describe 'Threat provider normalization and boundary search' {
             $result.Stable | Should -BeFalse
             $result.Confidence | Should -Be 'Low'
         }
+
+        It 'surfaces ProbeCount in the flattened result from the ProbeLog' {
+            $withLog = [pscustomobject]@{
+                Success                         = $true
+                File                            = 'sample.bin'
+                FileSha256                      = $null
+                ScanTimestampUtc                = $null
+                Engine                          = 'Defender'
+                ScanMode                        = 'RawBytes'
+                BoundaryUnit                    = 'Byte'
+                Encoding                        = $null
+                SearchModel                     = 'MonotonicPrefixTransition'
+                InitialStatus                   = 'Detected'
+                DetectionPrefixLength           = 11
+                DetectionBoundaryOffset         = 10
+                DetectionBoundaryHex            = '0xA'
+                DetectionCharacterIndex         = $null
+                DetectionUtf16CodeUnitIndex     = $null
+                KnownCleanPrefixLength          = 10
+                Stable                          = $true
+                Confidence                      = 'High'
+                ScanCount                       = 5
+                SignatureName                   = $null
+                BoundaryValidation              = $null
+                ProbeLog                        = @(
+                    [pscustomobject]@{ Sequence = 1; PrefixLength = 0 }
+                    [pscustomobject]@{ Sequence = 2; PrefixLength = 32 }
+                    [pscustomobject]@{ Sequence = 3; PrefixLength = 11 }
+                )
+                DurationMs                      = 1
+                Warnings                        = @()
+                Error                           = $null
+            }
+
+            $flat = ConvertTo-OIFlatThreatResult -Result $withLog
+            $flat.ProbeCount | Should -Be 3
+        }
+
+        It 'sets ProbeCount to null when the result carries no ProbeLog' {
+            $noLog = [pscustomobject]@{
+                Success                         = $false
+                File                            = 'sample.bin'
+                FileSha256                      = $null
+                ScanTimestampUtc                = $null
+                Engine                          = 'Defender'
+                ScanMode                        = 'RawBytes'
+                BoundaryUnit                    = 'Byte'
+                Encoding                        = $null
+                SearchModel                     = 'MonotonicPrefixTransition'
+                InitialStatus                   = $null
+                DetectionPrefixLength           = $null
+                DetectionBoundaryOffset         = $null
+                DetectionBoundaryHex            = $null
+                DetectionCharacterIndex         = $null
+                DetectionUtf16CodeUnitIndex     = $null
+                KnownCleanPrefixLength          = $null
+                Stable                          = $false
+                Confidence                      = 'None'
+                ScanCount                       = 0
+                SignatureName                   = $null
+                BoundaryValidation              = $null
+                DurationMs                      = 1
+                Warnings                        = @()
+                Error                           = 'failure'
+            }
+
+            $flat = ConvertTo-OIFlatThreatResult -Result $noLog
+            $flat.ProbeCount | Should -BeNullOrEmpty
+        }
+
+    }
+}
+
+Describe 'ProbeLog JSON export' {
+    # Export-OIProbeLog is module-private, so the write runs inside InModuleScope,
+    # but the JSON is parsed back in the normal test scope: Windows PowerShell 5.1
+    # does not enumerate ConvertFrom-Json arrays correctly inside a module session
+    # state, whereas real consumers parse the file in their own scope.
+    It 'exports an empty ProbeLog as a valid empty JSON array' {
+        $path = Join-Path $TestDrive 'probelog-empty.json'
+        $returned = InModuleScope OffsetInspect -Parameters @{ TargetPath = $path } {
+            param($TargetPath)
+            Export-OIProbeLog -ProbeLog @() -Path $TargetPath
+        }
+
+        Test-Path -LiteralPath $returned | Should -BeTrue
+        (Get-Content -LiteralPath $path -Raw).Trim() | Should -Be '[]'
+    }
+
+    It 'exports a single-record ProbeLog as a one-element JSON array' {
+        $path = Join-Path $TestDrive 'probelog-one.json'
+        InModuleScope OffsetInspect -Parameters @{ TargetPath = $path } {
+            param($TargetPath)
+            $log = @([pscustomobject]@{ Sequence = 1; PrefixLength = 42; Status = 'Detected' })
+            $null = Export-OIProbeLog -ProbeLog $log -Path $TargetPath
+        }
+
+        # Assign first, then wrap: Windows PowerShell 5.1 ConvertFrom-Json emits a
+        # top-level JSON array as a single non-enumerated object, so @(pipeline)
+        # would count it as 1; @($assigned) unrolls it correctly on both editions.
+        $parsed = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+        $parsed = @($parsed)
+        $parsed.Count | Should -Be 1
+        $parsed[0].PrefixLength | Should -Be 42
+        $parsed[0].Status | Should -Be 'Detected'
+    }
+
+    It 'exports a multi-record ProbeLog preserving issue order' {
+        $path = Join-Path $TestDrive 'probelog-many.json'
+        InModuleScope OffsetInspect -Parameters @{ TargetPath = $path } {
+            param($TargetPath)
+            $log = @(
+                [pscustomobject]@{ Sequence = 1; PrefixLength = 0;  Status = 'Clean' }
+                [pscustomobject]@{ Sequence = 2; PrefixLength = 32; Status = 'Detected' }
+                [pscustomobject]@{ Sequence = 3; PrefixLength = 11; Status = 'Detected' }
+            )
+            $null = Export-OIProbeLog -ProbeLog $log -Path $TargetPath
+        }
+
+        # Assign first, then wrap: Windows PowerShell 5.1 ConvertFrom-Json emits a
+        # top-level JSON array as a single non-enumerated object, so @(pipeline)
+        # would count it as 1; @($assigned) unrolls it correctly on both editions.
+        $parsed = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+        $parsed = @($parsed)
+        $parsed.Count | Should -Be 3
+        @($parsed | ForEach-Object { $_.Sequence }) | Should -Be @(1, 2, 3)
+        $parsed[1].PrefixLength | Should -Be 32
+    }
+}
+
+Describe 'Export-OffsetThreatReport' {
+    BeforeAll {
+        function New-OITestThreatResult {
+            param(
+                [string]$File = 'sample.ps1',
+                [string[]]$Warnings = @()
+            )
+            [pscustomobject]@{
+                Success                 = $true
+                File                    = $File
+                FileSha256              = 'abc123'
+                ScanTimestampUtc        = '2026-07-12T00:00:00.0000000Z'
+                Engine                  = 'AMSI'
+                ScanMode                = 'Text'
+                InitialStatus           = 'Detected'
+                DetectionPrefixLength   = 11
+                DetectionBoundaryOffset = 10
+                DetectionBoundaryHex    = '0xA'
+                KnownCleanPrefixLength  = 10
+                Stable                  = $true
+                Confidence              = 'High'
+                SignatureName           = 'Mock/Test'
+                ProbeLog                = @(
+                    [pscustomobject]@{ Sequence = 1; PrefixLength = 0;  Status = 'Clean';    ElapsedMs = 1.2; SignatureName = $null }
+                    [pscustomobject]@{ Sequence = 2; PrefixLength = 11; Status = 'Detected'; ElapsedMs = 3.4; SignatureName = 'Mock/Test' }
+                )
+                ProviderMetadata        = [pscustomobject]@{ Provider = 'AMSI'; DefenderSignatureVersion = '1.400.1.0' }
+                DurationMs              = 5
+                Warnings                = $Warnings
+                Error                   = $null
+            }
+        }
+    }
+
+    It 'writes a Markdown report with summary, probe log, and warnings' {
+        $path = Join-Path $TestDrive 'report.md'
+        $returned = New-OITestThreatResult -Warnings @('Manual validation recommended.') |
+            Export-OffsetThreatReport -Path $path
+
+        Test-Path -LiteralPath $returned | Should -BeTrue
+        $text = Get-Content -LiteralPath $path -Raw
+        $text | Should -Match '# OffsetInspect Detection-Boundary Report'
+        $text | Should -Match 'sample\.ps1'
+        $text | Should -Match 'Detection prefix length:\*\* 11'
+        $text | Should -Match 'Provider probes:\*\* 2'
+        $text | Should -Match '\| # \| Prefix \| Status \| Elapsed'
+        $text | Should -Match 'DefenderSignatureVersion'
+        $text | Should -Match 'Manual validation recommended\.'
+    }
+
+    It 'writes self-contained HTML and encodes every value' {
+        $path = Join-Path $TestDrive 'report.html'
+        $null = New-OITestThreatResult -Warnings @('<script>alert(1)</script>') |
+            Export-OffsetThreatReport -Path $path -Format Html -Title 'Engagement <Alpha>'
+
+        $html = Get-Content -LiteralPath $path -Raw
+        $html | Should -Match '<!DOCTYPE html>'
+        $html | Should -Match '<h1>Engagement &lt;Alpha&gt;</h1>'
+        $html | Should -Match '&lt;script&gt;alert\(1\)&lt;/script&gt;'
+        $html | Should -Not -Match '<script>alert\(1\)'
+    }
+
+    It 'aggregates multiple piped results into one report' {
+        $path = Join-Path $TestDrive 'multi-report.md'
+        $null = @(
+            (New-OITestThreatResult -File 'first.ps1'),
+            (New-OITestThreatResult -File 'second.bin')
+        ) | Export-OffsetThreatReport -Path $path
+
+        $text = Get-Content -LiteralPath $path -Raw
+        $text | Should -Match '2 scan record\(s\)'
+        $text | Should -Match 'first\.ps1'
+        $text | Should -Match 'second\.bin'
+    }
+
+    It 'writes BOM-less UTF-8' {
+        $path = Join-Path $TestDrive 'bomless.md'
+        $null = New-OITestThreatResult | Export-OffsetThreatReport -Path $path
+        $bytes = [System.IO.File]::ReadAllBytes($path)
+        # First byte must be '#' (0x23), not a UTF-8 BOM (0xEF).
+        $bytes[0] | Should -Be 0x23
+    }
+}
+
+Describe 'Resolve-OIBatchTarget (batch enumeration)' {
+    BeforeAll {
+        $script:BatchDir = Join-Path $TestDrive 'corpus'
+        $script:BatchSub = Join-Path $script:BatchDir 'nested'
+        New-Item -ItemType Directory -Path $script:BatchSub -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:BatchDir 'alpha.ps1') -Value 'a'
+        Set-Content -LiteralPath (Join-Path $script:BatchDir 'beta.bin') -Value 'b'
+        Set-Content -LiteralPath (Join-Path $script:BatchSub 'gamma.ps1') -Value 'g'
+    }
+
+    It 'enumerates a directory non-recursively' {
+        $files = InModuleScope OffsetInspect -Parameters @{ Dir = $script:BatchDir } {
+            param($Dir) Resolve-OIBatchTarget -Path $Dir
+        }
+        @($files).Count | Should -Be 2
+    }
+
+    It 'recurses into subdirectories when requested' {
+        $files = InModuleScope OffsetInspect -Parameters @{ Dir = $script:BatchDir } {
+            param($Dir) Resolve-OIBatchTarget -Path $Dir -Recurse
+        }
+        @($files).Count | Should -Be 3
+    }
+
+    It 'applies a filter' {
+        $files = InModuleScope OffsetInspect -Parameters @{ Dir = $script:BatchDir } {
+            param($Dir) Resolve-OIBatchTarget -Path $Dir -Filter '*.ps1'
+        }
+        @($files).Count | Should -Be 1
+        @($files)[0] | Should -Match 'alpha\.ps1$'
+    }
+
+    It 'de-duplicates a directory plus an explicit member file' {
+        $explicit = Join-Path $script:BatchDir 'alpha.ps1'
+        $files = InModuleScope OffsetInspect -Parameters @{ Dir = $script:BatchDir; File = $explicit } {
+            param($Dir, $File) Resolve-OIBatchTarget -Path @($Dir, $File)
+        }
+        @($files | Where-Object { $_ -match 'alpha\.ps1$' }).Count | Should -Be 1
+    }
+}
+
+Describe 'Invoke-OffsetThreatScanBatch (orchestration)' {
+    BeforeAll {
+        $script:ScanDir = Join-Path $TestDrive 'scans'
+        New-Item -ItemType Directory -Path $script:ScanDir -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:ScanDir 'one.ps1') -Value '1'
+        Set-Content -LiteralPath (Join-Path $script:ScanDir 'two.ps1') -Value '2'
+        Set-Content -LiteralPath (Join-Path $script:ScanDir 'boom.ps1') -Value '3'
+    }
+
+    It 'scans every file, continues past a failure, and summarises the matrix' {
+        $outcome = InModuleScope OffsetInspect -Parameters @{ Dir = $script:ScanDir } {
+            param($Dir)
+
+            # Bypass the Windows-only guard and the live provider so the
+            # orchestration logic is verified on every platform.
+            Mock Test-OIIsWindows { $true }
+            Mock Invoke-OffsetThreatScan {
+                if ($FilePath -like '*boom.ps1') { throw 'simulated provider failure' }
+                [pscustomobject]@{
+                    Success                     = $true
+                    File                        = $FilePath
+                    FileSize                    = 3
+                    FileSha256                  = 'h'
+                    ScanTimestampUtc            = 't'
+                    Engine                      = 'AMSI'
+                    ScanMode                    = 'Text'
+                    BoundaryUnit                = 'Scalar'
+                    SearchModel                 = 'MonotonicPrefixTransition'
+                    Encoding                    = 'UTF8'
+                    InitialStatus               = 'Detected'
+                    DetectionPrefixLength       = 2
+                    DetectionBoundaryOffset     = 1
+                    DetectionBoundaryHex        = '0x1'
+                    DetectionCharacterIndex     = $null
+                    DetectionUtf16CodeUnitIndex = $null
+                    KnownCleanPrefixLength      = 1
+                    Stable                      = $true
+                    Confidence                  = 'High'
+                    ScanCount                   = 3
+                    SignatureName               = 'Mock/Test'
+                    ProviderResult              = 1
+                    ProviderHResult             = $null
+                    ProviderMetadata            = $null
+                    BoundaryValidation          = $null
+                    ProviderOutput              = $null
+                    ProbeLog                    = @(
+                        [pscustomobject]@{ Sequence = 1; PrefixLength = 1 }
+                        [pscustomobject]@{ Sequence = 2; PrefixLength = 2 }
+                    )
+                    Inspection                  = $null
+                    DurationMs                  = 1
+                    Warnings                    = @()
+                    Error                       = $null
+                }
+            }
+
+            $full = @(Invoke-OffsetThreatScanBatch -Path $Dir -NoProgress)
+            $summary = @(Invoke-OffsetThreatScanBatch -Path $Dir -Summary -NoProgress)
+            [pscustomobject]@{ Full = $full; Summary = $summary }
+        }
+
+        @($outcome.Full).Count | Should -Be 3
+        @($outcome.Full | Where-Object { -not $_.Success }).Count | Should -Be 1
+        @($outcome.Summary).Count | Should -Be 3
+        @($outcome.Summary | Where-Object { $_.ProbeCount -eq 2 }).Count | Should -Be 2
+    }
+}
+
+Describe 'Compare-OffsetThreatResult' {
+    BeforeAll {
+        function New-OIDiffResult {
+            param(
+                [string]$File = 'sample.ps1',
+                $DetectionPrefixLength = $null,
+                [string]$SignatureName = $null,
+                [int]$ProbeCount = 0
+            )
+            $detected = $null -ne $DetectionPrefixLength
+            $probe = New-Object 'System.Collections.Generic.List[object]'
+            for ($i = 1; $i -le $ProbeCount; $i++) { $probe.Add([pscustomobject]@{ Sequence = $i }) }
+            [pscustomobject]@{
+                File                    = $File
+                InitialStatus           = if ($detected) { 'Detected' } else { 'Clean' }
+                DetectionPrefixLength   = $DetectionPrefixLength
+                DetectionBoundaryOffset = if ($detected) { $DetectionPrefixLength - 1 } else { $null }
+                DetectionBoundaryHex    = $null
+                Stable                  = $true
+                Confidence              = if ($detected) { 'High' } else { 'None' }
+                SignatureName           = $SignatureName
+                ProbeLog                = $probe.ToArray()
+            }
+        }
+    }
+
+    It 'classifies a boundary that moved earlier' {
+        $diff = Compare-OffsetThreatResult -Reference (New-OIDiffResult -DetectionPrefixLength 20) -Difference (New-OIDiffResult -DetectionPrefixLength 11)
+        $diff.Classification | Should -Be 'BoundaryEarlier'
+        $diff.BoundaryDelta | Should -Be -9
+        @($diff.Changes | ForEach-Object { $_.Field }) | Should -Contain 'DetectionPrefixLength'
+    }
+
+    It 'classifies a boundary that moved later' {
+        $diff = Compare-OffsetThreatResult -Reference (New-OIDiffResult -DetectionPrefixLength 11) -Difference (New-OIDiffResult -DetectionPrefixLength 20)
+        $diff.Classification | Should -Be 'BoundaryLater'
+        $diff.BoundaryDelta | Should -Be 9
+    }
+
+    It 'classifies newly-detected content' {
+        $diff = Compare-OffsetThreatResult -Reference (New-OIDiffResult) -Difference (New-OIDiffResult -DetectionPrefixLength 11)
+        $diff.Classification | Should -Be 'NewlyDetected'
+        $diff.BoundaryDelta | Should -BeNullOrEmpty
+    }
+
+    It 'classifies content that is no longer detected' {
+        $diff = Compare-OffsetThreatResult -Reference (New-OIDiffResult -DetectionPrefixLength 11) -Difference (New-OIDiffResult)
+        $diff.Classification | Should -Be 'NoLongerDetected'
+    }
+
+    It 'reports both-clean with no changes' {
+        $diff = Compare-OffsetThreatResult -Reference (New-OIDiffResult) -Difference (New-OIDiffResult)
+        $diff.Classification | Should -Be 'BothClean'
+        $diff.Unchanged | Should -BeTrue
+    }
+
+    It 'flags a signature change at an unchanged boundary' {
+        $diff = Compare-OffsetThreatResult -Reference (New-OIDiffResult -DetectionPrefixLength 11 -SignatureName 'Old/Sig') -Difference (New-OIDiffResult -DetectionPrefixLength 11 -SignatureName 'New/Sig')
+        $diff.Classification | Should -Be 'BoundaryUnchanged'
+        $diff.SignatureChanged | Should -BeTrue
+        @($diff.Changes | ForEach-Object { $_.Field }) | Should -Contain 'SignatureName'
+    }
+
+    It 'surfaces probe counts from both sides' {
+        $diff = Compare-OffsetThreatResult -Reference (New-OIDiffResult -DetectionPrefixLength 11 -ProbeCount 4) -Difference (New-OIDiffResult -DetectionPrefixLength 11 -ProbeCount 6)
+        $diff.ReferenceProbeCount | Should -Be 4
+        $diff.DifferenceProbeCount | Should -Be 6
+    }
+}
+
+Describe 'Split-OIByteRange (segmentation)' {
+    It 'splits into contiguous, gap-free segments covering the whole range' {
+        $segments = InModuleScope OffsetInspect { Split-OIByteRange -TotalLength 103 -SegmentCount 10 }
+        @($segments).Count | Should -Be 10
+        (@($segments) | Measure-Object -Property Length -Sum).Sum | Should -Be 103
+
+        $expectedStart = 0
+        foreach ($segment in @($segments)) {
+            $segment.Start | Should -Be $expectedStart
+            $expectedStart = $segment.Start + $segment.Length
+        }
+        $expectedStart | Should -Be 103
+    }
+
+    It 'clamps the segment count to the byte length for tiny inputs' {
+        $segments = InModuleScope OffsetInspect { Split-OIByteRange -TotalLength 3 -SegmentCount 10 }
+        @($segments).Count | Should -Be 3
+    }
+
+    It 'returns nothing for an empty range' {
+        $segments = InModuleScope OffsetInspect { Split-OIByteRange -TotalLength 0 }
+        @($segments).Count | Should -Be 0
+    }
+}
+
+Describe 'Find-OIDetectionSegment (multi-region core)' {
+    BeforeAll {
+        # 100 bytes of 'A' with a single detectable marker (0xEE) at offset 55.
+        $script:RegionFile = Join-Path $TestDrive 'region-source.bin'
+        $regionBytes = New-Object byte[] 100
+        for ($i = 0; $i -lt 100; $i++) { $regionBytes[$i] = 0x41 }
+        $regionBytes[55] = 0xEE
+        [System.IO.File]::WriteAllBytes($script:RegionFile, $regionBytes)
+    }
+
+    It 'isolates the detected segment and maps the boundary to an absolute offset' {
+        $regions = InModuleScope OffsetInspect -Parameters @{ FilePath = $script:RegionFile } {
+            param($FilePath)
+            $scanner = {
+                param([byte[]]$Bytes, [int]$Length)
+                if ([array]::IndexOf($Bytes, [byte]0xEE, 0, $Length) -ge 0) {
+                    [pscustomobject]@{ Status = 'Detected'; ProviderResult = 32768; HResult = '0x00000000'; SignatureName = 'Mock/Region'; Message = $null; RawOutput = $null }
+                }
+                else {
+                    [pscustomobject]@{ Status = 'Clean'; ProviderResult = 0; HResult = '0x00000000'; SignatureName = $null; Message = $null; RawOutput = $null }
+                }
+            }
+            $stream = [System.IO.File]::Open($FilePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+            try {
+                $segments = Split-OIByteRange -TotalLength $stream.Length -SegmentCount 10
+                Find-OIDetectionSegment -Stream $stream -Segment $segments -BufferScanner $scanner -Refine -NoProgress
+            }
+            finally { $stream.Dispose() }
+        }
+
+        @($regions).Count | Should -Be 1
+        @($regions)[0].SignatureName | Should -Be 'Mock/Region'
+        @($regions)[0].StartOffset | Should -Be 50
+        @($regions)[0].EndOffset | Should -Be 59
+        # Marker at offset 55 -> boundary bisects to prefix length 6 within the segment -> absolute 56.
+        @($regions)[0].AbsoluteBoundaryOffset | Should -Be 56
+    }
+
+    It 'reports segment-level hits without a boundary when -Refine is omitted' {
+        $regions = InModuleScope OffsetInspect -Parameters @{ FilePath = $script:RegionFile } {
+            param($FilePath)
+            $scanner = {
+                param([byte[]]$Bytes, [int]$Length)
+                if ([array]::IndexOf($Bytes, [byte]0xEE, 0, $Length) -ge 0) {
+                    [pscustomobject]@{ Status = 'Detected'; ProviderResult = 32768; HResult = '0x00000000'; SignatureName = $null; Message = $null; RawOutput = $null }
+                }
+                else {
+                    [pscustomobject]@{ Status = 'Clean'; ProviderResult = 0; HResult = '0x00000000'; SignatureName = $null; Message = $null; RawOutput = $null }
+                }
+            }
+            $stream = [System.IO.File]::Open($FilePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+            try {
+                $segments = Split-OIByteRange -TotalLength $stream.Length -SegmentCount 10
+                Find-OIDetectionSegment -Stream $stream -Segment $segments -BufferScanner $scanner -NoProgress
+            }
+            finally { $stream.Dispose() }
+        }
+
+        @($regions).Count | Should -Be 1
+        @($regions)[0].WithinSegmentBoundary | Should -BeNullOrEmpty
+        @($regions)[0].AbsoluteBoundaryOffset | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Entropy analysis' {
+    It 'computes zero entropy for a single repeated byte' {
+        $value = InModuleScope OffsetInspect { Get-OIShannonEntropy -Bytes ([byte[]](@(0x41) * 512)) }
+        $value | Should -Be 0
+    }
+
+    It 'computes one bit for a balanced two-value buffer' {
+        $bytes = [byte[]]((@(0x00) * 256) + (@(0x01) * 256))
+        $value = InModuleScope OffsetInspect -Parameters @{ B = $bytes } { param($B) Get-OIShannonEntropy -Bytes $B }
+        $value | Should -Be 1
+    }
+
+    It 'reaches eight bits for a uniform byte distribution' {
+        $bytes = [byte[]](0..255)
+        $value = InModuleScope OffsetInspect -Parameters @{ B = $bytes } { param($B) Get-OIShannonEntropy -Bytes $B }
+        $value | Should -Be 8
+    }
+
+    It 'compiles the native accelerator and matches the reference computation' {
+        $native = InModuleScope OffsetInspect {
+            Initialize-OIEntropyAccelerator
+            [OffsetInspect.Native.EntropyCalculator]::Shannon([byte[]](0..255), 256)
+        }
+        [Math]::Round($native, 6) | Should -Be 8
+    }
+
+    It 'flags the high-entropy region of a file' {
+        $low = [byte[]](@(0x41) * 512)
+        $high = New-Object byte[] 512
+        for ($i = 0; $i -lt 512; $i++) { $high[$i] = [byte]($i % 256) }
+        $path = Join-Path $TestDrive 'entropy.bin'
+        [System.IO.File]::WriteAllBytes($path, [byte[]]($low + $high))
+
+        $result = Get-OffsetEntropy -FilePath $path -WindowSize 256 -HighEntropyThreshold 7.0
+        $result.WindowCount | Should -Be 4
+        $result.HighWindowCount | Should -Be 2
+        @($result.Windows)[0].IsHigh | Should -BeFalse
+        @($result.Windows)[3].IsHigh | Should -BeTrue
+    }
+}
+
+Describe 'String extraction' {
+    It 'extracts ASCII and UTF-16LE strings with correct offsets' {
+        $ascii = [System.Text.Encoding]::ASCII.GetBytes('HELLO')
+        $unicode = [System.Text.Encoding]::Unicode.GetBytes('WORLD')
+        $bytes = [byte[]]((@(0x00, 0x00, 0x00)) + $ascii + (@(0x00, 0x00)) + $unicode)
+
+        $found = InModuleScope OffsetInspect -Parameters @{ B = $bytes } { param($B) Get-OIByteString -Bytes $B -MinimumLength 4 }
+        $asciiHit = @($found | Where-Object Encoding -eq 'Ascii')
+        $unicodeHit = @($found | Where-Object Encoding -eq 'Unicode')
+
+        $asciiHit.Count | Should -Be 1
+        $asciiHit[0].Value | Should -Be 'HELLO'
+        $asciiHit[0].Offset | Should -Be 3
+        $unicodeHit.Count | Should -Be 1
+        $unicodeHit[0].Value | Should -Be 'WORLD'
+        $unicodeHit[0].Offset | Should -Be 10
+    }
+
+    It 'honours the minimum length' {
+        # A null byte separates a below-threshold run ('abc', 3) from a kept run ('DEFGH', 5).
+        $bytes = [byte[]]([System.Text.Encoding]::ASCII.GetBytes('abc') + (@(0x00)) + [System.Text.Encoding]::ASCII.GetBytes('DEFGH'))
+        $found = InModuleScope OffsetInspect -Parameters @{ B = $bytes } { param($B) Get-OIByteString -Bytes $B -MinimumLength 4 -Encoding Ascii }
+        @($found).Count | Should -Be 1
+        @($found)[0].Value | Should -Be 'DEFGH'
+    }
+
+    It 'finds strings in a file with byte offsets through the public command' {
+        $bytes = [byte[]]((@(0x00) * 4) + [System.Text.Encoding]::ASCII.GetBytes('MalwareStr'))
+        $path = Join-Path $TestDrive 'strings.bin'
+        [System.IO.File]::WriteAllBytes($path, $bytes)
+
+        $hits = @(Get-OffsetString -FilePath $path -Encoding Ascii -MinimumLength 4 | Where-Object Value -eq 'MalwareStr')
+        $hits.Count | Should -Be 1
+        $hits[0].Offset | Should -Be 4
+    }
+}
+
+Describe 'PE parsing' {
+    BeforeAll {
+        function New-OITestPEBytes {
+            $bytes = New-Object byte[] 1024
+            $bytes[0] = 0x4D; $bytes[1] = 0x5A
+            [BitConverter]::GetBytes([int32]0x40).CopyTo($bytes, 0x3C)
+            $bytes[0x40] = 0x50; $bytes[0x41] = 0x45; $bytes[0x42] = 0x00; $bytes[0x43] = 0x00
+            [BitConverter]::GetBytes([uint16]0x8664).CopyTo($bytes, 0x44)
+            [BitConverter]::GetBytes([uint16]1).CopyTo($bytes, 0x46)
+            [BitConverter]::GetBytes([uint16]0xF0).CopyTo($bytes, 0x54)
+            [BitConverter]::GetBytes([uint16]0x20B).CopyTo($bytes, 0x58)
+            [BitConverter]::GetBytes([uint32]0x1000).CopyTo($bytes, 0x68)
+            [BitConverter]::GetBytes([uint64]0x140000000).CopyTo($bytes, 0x70)
+            $section = 0x148
+            [System.Text.Encoding]::ASCII.GetBytes('.text').CopyTo($bytes, $section)
+            [BitConverter]::GetBytes([uint32]0x150).CopyTo($bytes, $section + 8)
+            [BitConverter]::GetBytes([uint32]0x1000).CopyTo($bytes, $section + 12)
+            [BitConverter]::GetBytes([uint32]0x200).CopyTo($bytes, $section + 16)
+            [BitConverter]::GetBytes([uint32]0x200).CopyTo($bytes, $section + 20)
+            return , $bytes
+        }
+
+        $script:PEFile = Join-Path $TestDrive 'sample-pe.bin'
+        [System.IO.File]::WriteAllBytes($script:PEFile, (New-OITestPEBytes))
+    }
+
+    It 'parses machine, bitness, entry point, and sections' {
+        $buffer = [System.IO.File]::ReadAllBytes($script:PEFile)
+        $image = InModuleScope OffsetInspect -Parameters @{ Buffer = $buffer } { param($Buffer) ConvertTo-OIPEImage -Bytes $Buffer }
+        $image.Machine | Should -Be 'x64 (AMD64)'
+        $image.IsPE32Plus | Should -BeTrue
+        $image.EntryPointRva | Should -Be 0x1000
+        $image.SectionCount | Should -Be 1
+        @($image.Sections)[0].Name | Should -Be '.text'
+        @($image.Sections)[0].PointerToRawData | Should -Be 0x200
+    }
+
+    It 'maps file offsets to sections, headers, and gaps' {
+        $buffer = [System.IO.File]::ReadAllBytes($script:PEFile)
+        $mapping = InModuleScope OffsetInspect -Parameters @{ Buffer = $buffer } {
+            param($Buffer)
+            $image = ConvertTo-OIPEImage -Bytes $Buffer
+            [pscustomobject]@{
+                InText    = Get-OIPESectionForOffset -Image $image -Offset 0x250
+                InHeaders = Get-OIPESectionForOffset -Image $image -Offset 0x100
+                Beyond    = Get-OIPESectionForOffset -Image $image -Offset 0x900
+            }
+        }
+        $mapping.InText | Should -Be '.text'
+        $mapping.InHeaders | Should -Be 'headers'
+        $mapping.Beyond | Should -BeNullOrEmpty
+    }
+
+    It 'rejects a non-PE buffer' {
+        $random = New-Object byte[] 128
+        { InModuleScope OffsetInspect -Parameters @{ Buffer = $random } { param($Buffer) ConvertTo-OIPEImage -Bytes $Buffer } } | Should -Throw
+    }
+
+    It 'exposes PE info and maps an offset through the public command' {
+        $info = Get-OffsetPEInfo -FilePath $script:PEFile -Offset 0x250
+        $info.Machine | Should -Be 'x64 (AMD64)'
+        $info.SectionCount | Should -Be 1
+        $info.MappedSection | Should -Be '.text'
+    }
+}
+
+Describe 'PE imports, overlay, and imphash' {
+    It 'computes imphash as MD5 of the lowercased import list' {
+        $hash = InModuleScope OffsetInspect { Get-OIImpHash -Entry @('kernel32.createfilea') }
+        $hash | Should -Be 'ac5547a4cef5a0a41523374a369ff4b1'
+        $empty = InModuleScope OffsetInspect { Get-OIImpHash -Entry @() }
+        $empty | Should -BeNullOrEmpty
+    }
+
+    It 'maps an RVA to a file offset via the section table' {
+        $mapping = InModuleScope OffsetInspect {
+            $image = [pscustomobject]@{ Sections = @([pscustomobject]@{ VirtualAddress = 0x1000; VirtualSize = 0x200; SizeOfRawData = 0x200; PointerToRawData = 0x400 }) }
+            [pscustomobject]@{
+                InSection  = ConvertFrom-OIRvaToOffset -Image $image -Rva 0x1050
+                OutOfRange = ConvertFrom-OIRvaToOffset -Image $image -Rva 0x9000
+            }
+        }
+        $mapping.InSection | Should -Be 0x450
+        $mapping.OutOfRange | Should -BeNullOrEmpty
+    }
+
+    It 'detects an appended overlay' {
+        $overlay = InModuleScope OffsetInspect {
+            $sections = @([pscustomobject]@{ PointerToRawData = 0x200; SizeOfRawData = 0x200 })
+            [pscustomobject]@{
+                WithOverlay = Get-OIPEOverlayRange -Section $sections -FileSize 0x500
+                NoOverlay   = Get-OIPEOverlayRange -Section $sections -FileSize 0x400
+            }
+        }
+        $overlay.WithOverlay.HasOverlay | Should -BeTrue
+        $overlay.WithOverlay.OverlayOffset | Should -Be 0x400
+        $overlay.WithOverlay.OverlaySize | Should -Be 0x100
+        $overlay.NoOverlay.HasOverlay | Should -BeFalse
+    }
+
+    It 'reads a null-terminated ASCII string at an offset' {
+        $path = Join-Path $TestDrive 'nullterm.bin'
+        $bytes = [byte[]]([System.Text.Encoding]::ASCII.GetBytes('hello') + (@(0)) + [System.Text.Encoding]::ASCII.GetBytes('world') + (@(0)))
+        [System.IO.File]::WriteAllBytes($path, $bytes)
+        $values = InModuleScope OffsetInspect -Parameters @{ P = $path } {
+            param($P)
+            $stream = [System.IO.File]::Open($P, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+            try {
+                [pscustomobject]@{
+                    First  = Read-OINullTerminatedAscii -Stream $stream -Offset 0
+                    Second = Read-OINullTerminatedAscii -Stream $stream -Offset 6
+                }
+            }
+            finally { $stream.Dispose() }
+        }
+        $values.First | Should -Be 'hello'
+        $values.Second | Should -Be 'world'
+    }
+}
+
+Describe 'YARA output parsing' {
+    It 'parses rule and string matches with byte offsets' {
+        $sample = @'
+DemoBenign C:\path\target.txt
+0x16:$a: OffsetInspect-marker
+0x40:$b: another
+'@
+        $yaraMatches = InModuleScope OffsetInspect -Parameters @{ O = $sample } { param($O) ConvertFrom-OIYaraOutput -Output $O -FilePath 'C:\path\target.txt' }
+        @($yaraMatches).Count | Should -Be 2
+        @($yaraMatches)[0].Rule | Should -Be 'DemoBenign'
+        @($yaraMatches)[0].StringId | Should -Be '$a'
+        @($yaraMatches)[0].Offset | Should -Be 0x16
+        @($yaraMatches)[0].Data | Should -Be 'OffsetInspect-marker'
+        @($yaraMatches)[1].Offset | Should -Be 0x40
+    }
+
+    It 'emits a rule-level record when no strings are reported' {
+        $sample = 'RuleNoStrings C:\path\target.txt'
+        $yaraMatches = InModuleScope OffsetInspect -Parameters @{ O = $sample } { param($O) ConvertFrom-OIYaraOutput -Output $O -FilePath 'C:\path\target.txt' }
+        @($yaraMatches).Count | Should -Be 1
+        @($yaraMatches)[0].Rule | Should -Be 'RuleNoStrings'
+        @($yaraMatches)[0].Offset | Should -BeNullOrEmpty
+    }
+
+    It 'returns nothing for empty output' {
+        $yaraMatches = InModuleScope OffsetInspect { ConvertFrom-OIYaraOutput -Output '' -FilePath 'x' }
+        @($yaraMatches).Count | Should -Be 0
+    }
+
+    It 'groups multiple rules with their own strings' {
+        $sample = @'
+RuleA C:\t
+0x10:$x: aaa
+RuleB C:\t
+0x20:$y: bbb
+0x30:$z: ccc
+'@
+        $yaraMatches = InModuleScope OffsetInspect -Parameters @{ O = $sample } { param($O) ConvertFrom-OIYaraOutput -Output $O -FilePath 'C:\t' }
+        @($yaraMatches).Count | Should -Be 3
+        @($yaraMatches | Where-Object Rule -eq 'RuleB').Count | Should -Be 2
+    }
+}
+
+Describe 'IOC panel and report enrichment' {
+    It 'computes MD5, SHA-1, and SHA-256 in a single pass (known vectors)' {
+        $path = Join-Path $TestDrive 'abc.bin'
+        [System.IO.File]::WriteAllBytes($path, [System.Text.Encoding]::ASCII.GetBytes('abc'))
+        $hashes = InModuleScope OffsetInspect -Parameters @{ P = $path } { param($P) Get-OIFileHash -Path $P }
+        $hashes.MD5 | Should -Be '900150983cd24fb0d6963f7d28e17f72'
+        $hashes.SHA1 | Should -Be 'a9993e364706816aba3e25717850c26c9cd0d89d'
+        $hashes.SHA256 | Should -Be 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+    }
+
+    It 'produces a consolidated IOC panel for a file' {
+        $path = Join-Path $TestDrive 'ioc.bin'
+        [System.IO.File]::WriteAllBytes($path, [System.Text.Encoding]::ASCII.GetBytes('the quick brown fox jumps over the lazy dog'))
+        $ioc = Get-OffsetIOC -FilePath $path
+        $ioc.SHA256.Length | Should -Be 64
+        $ioc.FileSize | Should -Be 43
+        $ioc.IsPE | Should -BeFalse
+        $ioc.PrintableStringCount | Should -BeGreaterThan 0
+    }
+
+    It 'enriches a report with an indicators section' {
+        $path = Join-Path $TestDrive 'reportfile.bin'
+        [System.IO.File]::WriteAllBytes($path, [System.Text.Encoding]::ASCII.GetBytes('abc'))
+        $result = [pscustomobject]@{
+            Success = $true; File = $path; Engine = 'AMSI'; ScanMode = 'Text'; InitialStatus = 'Detected'
+            DetectionPrefixLength = 1; Stable = $true; Confidence = 'High'; ProbeLog = @(); Warnings = @()
+        }
+        $out = Join-Path $TestDrive 'ioc-report.md'
+        $null = $result | Export-OffsetThreatReport -Path $out -IncludeIoc
+        $text = Get-Content -LiteralPath $out -Raw
+        $text | Should -Match '### Indicators'
+        $text | Should -Match '900150983cd24fb0d6963f7d28e17f72'
+    }
+}
+
+Describe 'ClamAV output parsing' {
+    It 'parses a clean result' {
+        $result = InModuleScope OffsetInspect { ConvertFrom-OIClamScanOutput -Output 'C:\path\file.bin: OK' -ExitCode 0 -FilePath 'C:\path\file.bin' }
+        $result.Status | Should -Be 'Clean'
+        $result.SignatureName | Should -BeNullOrEmpty
+    }
+
+    It 'parses a detection and captures the signature name' {
+        $result = InModuleScope OffsetInspect { ConvertFrom-OIClamScanOutput -Output 'C:\path\file.bin: Win.Test.EICAR_HDB-1 FOUND' -ExitCode 1 -FilePath 'C:\path\file.bin' }
+        $result.Status | Should -Be 'Detected'
+        $result.SignatureName | Should -Be 'Win.Test.EICAR_HDB-1'
+        $result.ProviderResult | Should -Be 1
+    }
+
+    It 'falls back to the exit code when no line matches' {
+        $result = InModuleScope OffsetInspect { ConvertFrom-OIClamScanOutput -Output '' -ExitCode 1 -FilePath 'x' }
+        $result.Status | Should -Be 'Detected'
+    }
+
+    It 'reports an error with the stderr message' {
+        $result = InModuleScope OffsetInspect { ConvertFrom-OIClamScanOutput -Output '' -ExitCode 2 -FilePath 'x' -RawError 'ERROR: Could not load database' }
+        $result.Status | Should -Be 'Error'
+        $result.Error | Should -Match 'database'
     }
 }

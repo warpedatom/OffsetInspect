@@ -20,7 +20,7 @@
 - [ ] Two package builds from identical source produce the same SHA-256 archive hash.
 - [ ] The archive contains only `OffsetInspect/` and required module files.
 - [ ] No executable, DLL, PDB, IDE, `bin`, `obj`, `.vs`, secret, or sample artifact is present.
-- [ ] Authenticode signatures are valid when signing is enabled.
+- [ ] Authenticode signing is optional; when required, apply it via `./build/Sign-And-Publish.ps1 -CertificateThumbprint <thumbprint>` before publishing, and confirm every signature reports `Valid`. The automated `publish-offsetinspect.yml` Gallery publish is unsigned unless that script is used.
 - [ ] GitHub release tag matches the manifest version.
 - [ ] PowerShell Gallery API key is supplied through the protected release environment.
 

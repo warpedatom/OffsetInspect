@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$RepoRoot = (Split-Path -Parent $PSScriptRoot),
-    [switch]$SkipAnalyzer
+    [switch]$SkipAnalyzer,
+    [switch]$Coverage
 )
 
 $ErrorActionPreference = 'Stop'
@@ -22,7 +23,7 @@ try {
     Import-Module (Join-Path $tempModule 'OffsetInspect.psd1') -Force -ErrorAction Stop
 
     $exports = @(Get-Command -Module OffsetInspect | Select-Object -ExpandProperty Name | Sort-Object)
-    $expected = @('Invoke-OffsetInspect', 'Invoke-OffsetThreatScan')
+    $expected = @('Compare-OffsetThreatResult', 'Export-OffsetThreatReport', 'Get-OffsetEntropy', 'Get-OffsetIOC', 'Get-OffsetPEInfo', 'Get-OffsetString', 'Invoke-OffsetClamScan', 'Invoke-OffsetInspect', 'Invoke-OffsetThreatScan', 'Invoke-OffsetThreatScanBatch', 'Invoke-OffsetThreatScanRegion', 'Invoke-OffsetYaraScan')
     if (($exports -join ',') -ne ($expected -join ',')) {
         throw "Unexpected exports: $($exports -join ', ')"
     }
@@ -66,10 +67,29 @@ $config.Run.Path = $testsPath
 $config.Run.Exit = $false
 $config.Run.PassThru = $true
 $config.Output.Verbosity = 'Detailed'
+if ($Coverage) {
+    $moduleRoot = Split-Path -Parent $manifestPath
+    $moduleFiles = @(
+        Get-ChildItem -LiteralPath $moduleRoot -Recurse -Filter '*.ps1' -File |
+            ForEach-Object { $_.FullName }
+    )
+    $config.CodeCoverage.Enabled = $true
+    $config.CodeCoverage.Path = $moduleFiles
+    $config.CodeCoverage.OutputFormat = 'JaCoCo'
+    $config.CodeCoverage.OutputPath = (Join-Path $RepoRoot 'coverage.xml')
+}
 $result = Invoke-Pester -Configuration $config
 
 if ($null -eq $result) {
     throw 'Pester did not return a validation result.'
+}
+
+if ($Coverage -and $null -ne $result.CodeCoverage) {
+    $analyzed = $result.CodeCoverage.CommandsAnalyzedCount
+    $executed = $result.CodeCoverage.CommandsExecutedCount
+    $percent = if ($analyzed -gt 0) { [Math]::Round(100.0 * $executed / $analyzed, 2) } else { 0 }
+    Write-Host ("Code coverage: {0}% ({1}/{2} commands); report: {3}" -f `
+        $percent, $executed, $analyzed, (Join-Path $RepoRoot 'coverage.xml')) -ForegroundColor Cyan
 }
 
 if ($result.Result -ne 'Passed') {

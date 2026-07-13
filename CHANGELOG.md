@@ -9,6 +9,81 @@ All notable changes to OffsetInspect are documented in this file. The project fo
 - Additional provider adapters after the v2 provider contract has received field testing.
 - Published benchmark baselines for representative text and binary corpora.
 
+## [3.0.0] - 2026-07-12
+
+### Added
+
+- Per-probe audit trail. `Invoke-OffsetThreatScan` results now expose a `ProbeLog`
+  property recording every distinct provider invocation (`Sequence`, `PrefixLength`,
+  `Status`, `ProviderResult`, `SignatureName`, `Cacheable`, `ElapsedMs`,
+  `TimestampUtc`). The same records stream to `-Verbose` in real time, and
+  `ProbeLog.Count` is surfaced in human output and as `ProbeCount` in CSV output.
+  This gives a report-ready transcript of the exact provider cost of a scan.
+- `docs/PROVIDER-INTERFACE.md` documenting the scanner contract, status-token
+  semantics, how to add a new provider without touching the search core, and the
+  resource isolation required before prefix probing can be parallelised.
+- Property/fuzz tests (`tests/ThreatSearch.Properties.Tests.ps1`) validating the
+  monotonic-transition invariant, logarithmic probe budget, and graceful handling
+  of indeterminate/erroring providers against a cross-platform mock. Runs in the
+  PowerShell 7 Linux CI leg (no Windows/AMSI/Defender required).
+- `Invoke-OffsetThreatScan -ProbeLogPath <file>` writes the `ProbeLog` to a JSON
+  file as a report-ready provider audit transcript, independent of the selected
+  output mode.
+- New public command `Export-OffsetThreatReport` renders one or more threat-scan
+  results (piped from `Invoke-OffsetThreatScan -PassThru`) into a self-contained
+  Markdown or HTML detection-boundary report: per-file summary, provider/signature/
+  engine metadata, the full ProbeLog, and warnings. Read-only and cross-platform.
+- New public command `Invoke-OffsetThreatScanBatch` scans a corpus of files,
+  directories, and wildcards (with `-Recurse`/`-Filter`), returning one result per
+  file and continuing past per-file failures. `-Summary` returns a flattened
+  detection matrix; the full results pipe directly into `Export-OffsetThreatReport`.
+- New public command `Compare-OffsetThreatResult` diffs two scan results (for
+  example the same file before and after a signature-definition update) into a
+  classified `OffsetInspect.ThreatScanDiff`: NewlyDetected, NoLongerDetected,
+  BoundaryEarlier, BoundaryLater, BoundaryUnchanged, or BothClean, with the boundary
+  delta, changed fields, and a signature-change flag.
+- New public command `Invoke-OffsetThreatScanRegion` discovers multiple
+  independently-detectable byte regions by splitting a file into segments and
+  scanning each in isolation through AMSI entirely in memory (no detected content is
+  written to disk, so Defender real-time protection is never triggered or altered).
+  Each hit is bisected within its segment to map the exact triggering boundary to an
+  absolute offset. It reports regions that trigger on their own and can miss
+  full-context or boundary-straddling signatures; confirm with `Invoke-OffsetThreatScan`.
+- New cross-platform static-triage commands: `Get-OffsetEntropy` (per-window Shannon
+  entropy to locate packed/encrypted regions), `Get-OffsetString` (ASCII and UTF-16LE
+  strings with byte offsets), and `Get-OffsetPEInfo` (PE machine/bitness, entry point,
+  section table, imports and imphash, appended-overlay detection, resource-directory
+  size, and `-Offset` mapping a byte offset to its section).
+- New command `Invoke-OffsetYaraScan` runs the YARA engine against a file with
+  analyst-authored rules and returns each match with its byte offset (rule, string id,
+  offset, matched data), feeding offsets into `Invoke-OffsetInspect`. Requires the YARA
+  engine on PATH (for example `winget install VirusTotal.YARA`); it is resolved
+  automatically or via `-YaraPath`.
+- New command `Get-OffsetIOC` returns a consolidated indicator panel for a file
+  (MD5/SHA-1/SHA-256 computed in a single pass, size, overall entropy, printable-string
+  count, and PE machine/imphash/overlay when applicable). `Export-OffsetThreatReport
+  -IncludeIoc` folds this panel into each report entry.
+- New command `Invoke-OffsetClamScan` scans a file with the ClamAV on-demand engine and
+  returns a normalized result (Clean/Detected/Error plus signature name). It is a
+  single-file detector, not a boundary-search provider - clamscan loads its full signature
+  database per invocation, so bisection would require the clamd daemon. Requires ClamAV
+  installed with databases (`winget install Cisco.ClamAV`, then `freshclam`).
+
+### Changed
+
+- The boundary-search memoisation cache is now a
+  `System.Collections.Concurrent.ConcurrentDictionary`, removing one blocker to a
+  future parallel probing mode. Probing itself remains sequential (see
+  `docs/PROVIDER-INTERFACE.md` §4).
+- `Get-OffsetEntropy` now computes its byte-frequency pass in a compiled .NET helper
+  (~95x faster on large inputs, identical results), falling back to the pure-PowerShell
+  computation if the helper cannot be compiled.
+
+### Notes
+
+- No changes to the AMSI or Defender provider behaviour, boundary semantics, or
+  output schema field meanings; `ProbeLog`/`ProbeCount` are additive.
+
 ## [2.0.0] - 2026-07-10
 
 ### Added
