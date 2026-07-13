@@ -18,6 +18,10 @@ function Invoke-OffsetThreatScan {
         Text uses AmsiScanString and reports both a character boundary and the mapped source-file
         byte offset. RawBytes preserves byte-for-byte prefix semantics.
 
+    .PARAMETER ProbeLogPath
+        Optional path. When supplied, the per-probe audit trail (ProbeLog) is also written to this
+        file as a JSON array, independent of the selected output mode, for attaching to a report.
+
     .EXAMPLE
         Invoke-OffsetThreatScan .\sample.ps1 -Engine AMSI -ScanMode Text -PassThru
 
@@ -62,6 +66,12 @@ function Invoke-OffsetThreatScan {
         [switch]$NoProgress,
 
         [switch]$IncludeProviderOutput,
+
+        # No [ValidateNotNullOrEmpty()]: an unbound [string] is '' (empty) under
+        # Windows PowerShell 5.1, and the scanner closures capture this scope via
+        # .GetNewClosure(), which rejects an empty value carrying that attribute.
+        # The empty case is handled by the IsNullOrWhiteSpace guard before export.
+        [string]$ProbeLogPath,
 
         [Parameter(Mandatory = $true, ParameterSetName = 'Object')]
         [switch]$PassThru,
@@ -440,6 +450,7 @@ function Invoke-OffsetThreatScan {
             ProviderMetadata         = $providerMetadata
             BoundaryValidation       = $boundaryValidation
             ProviderOutput           = $providerOutput
+            ProbeLog                 = if ($null -ne $search -and $null -ne $search.PSObject.Properties['ProbeLog']) { $search.ProbeLog } else { @() }
             Inspection               = $inspection
             DurationMs               = [Math]::Round($watch.Elapsed.TotalMilliseconds, 3)
             Warnings                 = $warnings.ToArray()
@@ -486,6 +497,7 @@ function Invoke-OffsetThreatScan {
                 }
             } else { $null }
             ProviderOutput           = $providerOutput
+            ProbeLog                 = if ($null -ne $search -and $null -ne $search.PSObject.Properties['ProbeLog']) { $search.ProbeLog } else { @() }
             Inspection               = $null
             DurationMs               = [Math]::Round($watch.Elapsed.TotalMilliseconds, 3)
             Warnings                 = $warnings.ToArray()
@@ -506,6 +518,11 @@ function Invoke-OffsetThreatScan {
             try { Remove-Item -LiteralPath $temporaryDirectory -Recurse -Force -ErrorAction Stop }
             catch { Write-Warning "Unable to remove temporary scan directory '$temporaryDirectory': $($_.Exception.Message)" }
         }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ProbeLogPath)) {
+        $exportedProbeLogPath = Export-OIProbeLog -ProbeLog $result.ProbeLog -Path $ProbeLogPath
+        Write-Verbose "Probe log written to $exportedProbeLogPath"
     }
 
     $output = Write-OIThreatOutput -Result $result -Mode $mode -CsvPath $CsvPath

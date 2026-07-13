@@ -44,6 +44,7 @@ OffsetInspect keeps public property names stable within major version 2. Additiv
 | `KnownCleanPrefixLength` | Int64 | Adjacent known-negative prefix |
 | `Stable` / `Confidence` | Boolean / String | Repeatability assessment around the boundary |
 | `ScanCount` | Int32 | Total prefix evaluations, including the synthetic empty-prefix baseline used by Defender |
+| `ProbeLog` | Object[] | Per-probe audit trail: one record per distinct provider invocation (cache misses only), each with `Sequence`, `PrefixLength`, `Status`, `ProviderResult`, `SignatureName`, `Cacheable`, `ElapsedMs`, `TimestampUtc`. Added in 3.0.0. |
 | `SignatureName` | String or null | Provider-reported name when available |
 | `ProviderResult` / `ProviderHResult` | Mixed | Raw normalized status values |
 | `ProviderMetadata` | Object | Engine, platform, and signature metadata when available |
@@ -56,5 +57,5 @@ OffsetInspect keeps public property names stable within major version 2. Additiv
 
 - `Invoke-OffsetInspect -Json` always emits an array.
 - Threat-scan JSON emits one object because the command accepts one file per invocation.
-- CSV output is intentionally flattened and omits nested context and provider metadata.
+- CSV output is intentionally flattened and omits nested context and provider metadata. The full `ProbeLog` array is replaced by a scalar `ProbeCount` column (its record count) so the true provider probe cost is preserved in tabular output. Added in 3.0.0.
 - Use object or JSON output when preserving nested structures matters.
