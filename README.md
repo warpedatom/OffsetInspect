@@ -226,6 +226,68 @@ A result such as `DetectionPrefixLength = 841` means:
 
 It does **not** prove that byte 840 is the complete signature, the only contributing byte, or the full malicious range. Antivirus decisions may depend on tokenization, surrounding context, file type, provider state, and signature updates.
 
+### Worked example: two engines, one file
+
+Scanning the same sample (PowerUp.ps1, a public red-team script, 445,954 bytes) with both providers shows what a boundary is and how far two engines can be trusted to agree. AMSI in text mode:
+
+```text
+Threat boundary scan: C:\Ops\Samples\PowerUp.ps1
+SHA-256:              7abc87d9620aef493617a4fc1f823850f32fb26ca9ae0f3befeadb04971e0246
+Engine:               AMSI
+Scan mode:            Text
+Initial status:       Detected
+Scans performed:      25
+Provider probes:      25 (see -Verbose or the ProbeLog property for the full audit trail)
+Duration:             22771.419 ms
+Known clean prefix:   445953
+Detected prefix:      445954
+Boundary offset:      445953 (0x6CE01)
+Unicode scalar index: 445953
+UTF-16 code-unit idx: 445953
+Stable:               True
+Confidence:           High
+
+Line number:          4586
+Byte in line:         46
+Target byte:          0A (10)
+
+--- Source Context ---
+   4585 | Set-Alias Get-CurrentUserTokenGroupSid Get-ProcessTokenGroup
+   4586 | Set-Alias Invoke-AllChecks Invoke-PrivescAudit
+                                                       ^
+```
+
+Microsoft Defender in raw-byte mode, same file:
+
+```text
+Engine:               Defender
+Scan mode:            RawBytes
+Initial status:       Detected
+Scans performed:      25
+Duration:             15370.562 ms
+Known clean prefix:   445951
+Detected prefix:      445952
+Boundary offset:      445951 (0x6CDFF)
+Stable:               True
+Confidence:           High
+Signature:            Trojan:Win32/Kepavll!rfn
+
+Line number:          4586
+Byte in line:         44
+Target byte:          69 (105)
+
+--- Hex Dump ---
+0006CDBF  74 2D 50 72 6F 63 65 73 73 54 6F 6B 65 6E 47 72   t-ProcessTokenGr
+0006CDCF  6F 75 70 0A 53 65 74 2D 41 6C 69 61 73 20 49 6E   oup.Set-Alias In
+0006CDDF  76 6F 6B 65 2D 41 6C 6C 43 68 65 63 6B 73 20 49   voke-AllChecks I
+0006CDEF  6E 76 6F 6B 65 2D 50 72 69 76 65 73 63 41 75 64   nvoke-PrivescAud
+0006CDFF  69 74 0A                                          it.
+```
+
+Both engines converge on **line 4586** — Defender's boundary falls inside the trailing `it` of `Invoke-PrivescAudit`, AMSI's on the newline that terminates the same line, two bytes later. Neither offset is "the signature": they are the earliest prefix each provider still flagged, and the two-byte disagreement is exactly the tokenization/context effect described above. Defender additionally names what it matched (`Trojan:Win32/Kepavll!rfn`); AMSI reports no signature name, which is why `Invoke-OffsetThreatScanRegion` and `Get-OffsetDetectionTrigger` exist to characterize an AMSI hit.
+
+Both scans cost 25 provider probes for a ~436 KiB file — the bisection is logarithmic in file size, and every probe is recorded in `ProbeLog`.
+
 See [Threat scanning design](./docs/THREAT-SCANNING.md) for the provider contract and interpretation guidance, [provider interface](./docs/PROVIDER-INTERFACE.md) for the scanner contract and how to add a provider without touching the search core, [threat-scanning provenance](./docs/PROVENANCE.md) for implementation boundaries and attribution, and [output schema](./docs/OUTPUT-SCHEMA.md) for the versioned object contract.
 
 ### Detection-boundary reports
