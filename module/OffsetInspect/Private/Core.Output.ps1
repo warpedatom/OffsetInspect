@@ -181,6 +181,28 @@ function ConvertTo-OIThreatReportMarkdown {
             $lines.Add('')
         }
 
+        $trigger = Get-OIResultProperty -InputObject $record -Name 'Trigger'
+        if ($null -ne $trigger) {
+            $lines.Add('### Detection trigger')
+            $lines.Add('')
+            $lines.Add("- **Interpretation:** $($trigger.Interpretation)")
+            $lines.Add("- **Boundary:** $($trigger.BoundaryOffset) ($($trigger.BoundaryHex)), byte $($trigger.BoundaryByteHex)")
+            if ($null -ne $trigger.Section) { $lines.Add("- **PE section:** $($trigger.Section)") }
+            $lines.Add("- **Pre-boundary entropy:** $($trigger.PreBoundaryEntropy) bits/byte")
+            $candidates = @(Get-OIResultProperty -InputObject $trigger -Name 'CandidateStrings' -Default @())
+            if ($candidates.Count -gt 0) {
+                $lines.Add('')
+                $lines.Add('| Offset | Enc | Dist | Candidate string |')
+                $lines.Add('|---|---|---:|---|')
+                foreach ($cand in $candidates) {
+                    $val = ([string]$cand.Value) -replace '\|', '\|' -replace '[\r\n]', ' '
+                    if ($val.Length -gt 80) { $val = $val.Substring(0, 80) + '...' }
+                    $lines.Add("| $($cand.OffsetHex) | $($cand.Encoding) | $($cand.DistanceToBoundary) | $val |")
+                }
+            }
+            $lines.Add('')
+        }
+
         $probeLog = @(Get-OIResultProperty -InputObject $record -Name 'ProbeLog' -Default @())
         if ($probeLog.Count -gt 0) {
             $lines.Add('### Probe log')
@@ -266,6 +288,24 @@ function ConvertTo-OIThreatReportHtml {
                 [void]$builder.AppendLine("<tr><th>Overlay</th><td>$(& $encode $ioc.HasOverlay) (size $(& $encode $ioc.OverlaySize))</td></tr>")
             }
             [void]$builder.AppendLine('</table>')
+        }
+
+        $trigger = Get-OIResultProperty -InputObject $record -Name 'Trigger'
+        if ($null -ne $trigger) {
+            [void]$builder.AppendLine('<h3>Detection trigger</h3><table>')
+            [void]$builder.AppendLine("<tr><th>Interpretation</th><td>$(& $encode $trigger.Interpretation)</td></tr>")
+            [void]$builder.AppendLine("<tr><th>Boundary</th><td>$(& $encode $trigger.BoundaryOffset) ($(& $encode $trigger.BoundaryHex)), byte $(& $encode $trigger.BoundaryByteHex)</td></tr>")
+            if ($null -ne $trigger.Section) { [void]$builder.AppendLine("<tr><th>PE section</th><td>$(& $encode $trigger.Section)</td></tr>") }
+            [void]$builder.AppendLine("<tr><th>Pre-boundary entropy</th><td>$(& $encode $trigger.PreBoundaryEntropy) bits/byte</td></tr>")
+            [void]$builder.AppendLine('</table>')
+            $candidates = @(Get-OIResultProperty -InputObject $trigger -Name 'CandidateStrings' -Default @())
+            if ($candidates.Count -gt 0) {
+                [void]$builder.AppendLine('<table><tr><th>Offset</th><th>Enc</th><th>Dist</th><th>Candidate string</th></tr>')
+                foreach ($cand in $candidates) {
+                    [void]$builder.AppendLine("<tr><td>$(& $encode $cand.OffsetHex)</td><td>$(& $encode $cand.Encoding)</td><td>$(& $encode $cand.DistanceToBoundary)</td><td><code>$(& $encode $cand.Value)</code></td></tr>")
+                }
+                [void]$builder.AppendLine('</table>')
+            }
         }
 
         $probeLog = @(Get-OIResultProperty -InputObject $record -Name 'ProbeLog' -Default @())

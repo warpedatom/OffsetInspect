@@ -9,6 +9,45 @@ All notable changes to OffsetInspect are documented in this file. The project fo
 - Additional provider adapters after the v2 provider contract has received field testing.
 - Published benchmark baselines for representative text and binary corpora.
 
+## [3.1.0] - 2026-07-19
+
+All-additive minor release. Existing commands, parameters, and output-schema field
+meanings are unchanged.
+
+### Added
+
+- `Get-OffsetDetectionTrigger` — correlates a detection boundary to the content that most
+  likely produced it. Because a prefix boundary is the last byte of the earliest detected
+  prefix, the trigger is a run ending at that offset; the command reports the PE section the
+  boundary falls in, the entropy of the run up to it (plaintext vs packed/encoded), and the
+  extracted strings ending at or straddling the boundary ranked by proximity (the candidate
+  signature content), with a one-line interpretation. Works on a `ThreatScanResult` pipeline
+  or a `-FilePath`/`-BoundaryOffset` pair. Read-only and cross-platform. New output object
+  `OffsetInspect.DetectionTrigger`.
+- Detection-drift journaling. `Add-OffsetDriftEntry` records append-only NDJSON snapshots
+  (file SHA-256, status, boundary, signature name, and the local Microsoft Defender
+  signature/engine versions) from a result pipeline or a file. `Get-OffsetDrift` reads the
+  journal and, for each file, explains every transition as a **file modification** (SHA-256
+  changed), a **signature-database update** (Defender signature version changed with the file
+  unchanged), or a **non-deterministic** provider result. New output objects
+  `OffsetInspect.DriftEntry` and `OffsetInspect.DriftReport`.
+- `Export-OffsetThreatReport -IocJsonPath` — sources IOC panels from the native OffsetScan
+  engine's JSON (`offsetscan ioc <corpus> > ioc.json`) instead of re-scanning each file in
+  PowerShell; `-IncludeIoc` becomes the live fallback for files absent from the JSON.
+- `Export-OffsetThreatReport -IncludeTrigger` — embeds detection-trigger analysis in the
+  Markdown and HTML reports.
+- `Invoke-OffsetMutationTest` — for authorized engagements, tests how robust a signature is by
+  applying standard perturbations (case inversion, string-literal concatenation, comment
+  insertion, whitespace injection) to a detected sample and re-scanning each variant with AMSI
+  to report which transform classes neutralize detection. Everything runs in memory; no variant
+  is written to disk, and the command refuses to run without `-AuthorizedEngagement`. New output
+  object `OffsetInspect.MutationTestResult`.
+
+### Fixed
+
+- Hardened Windows PowerShell 5.1 module-scope parsing of top-level JSON arrays, which the
+  new `-IocJsonPath` ingestion path depends on.
+
 ## [3.0.0] - 2026-07-12
 
 ### Added
