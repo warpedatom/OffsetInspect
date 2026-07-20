@@ -9,6 +9,42 @@ All notable changes to OffsetInspect are documented in this file. The project fo
 - Additional provider adapters after the v2 provider contract has received field testing.
 - Published benchmark baselines for representative text and binary corpora.
 
+## [3.1.1] - 2026-07-20
+
+Bug-fix release. No command, parameter, or output-schema changes.
+
+### Fixed
+
+- **`Get-OffsetString` split a string straddling a read-window seam into two truncated
+  halves.** The file is scanned in bounded-memory windows (1 MiB by default); a run that
+  reached the end of a window was emitted as-is and the remainder reported separately as a
+  new string. An indicator spanning a seam — a URL, C2 domain, or mutex name — was therefore
+  reported as two fragments, and a filter such as `Where-Object Value -match 'http'` could
+  miss it entirely. A trailing run is now held back and scanned with the following window,
+  so a straddling string is reported once, whole. The one remaining exception is a string
+  longer than an entire window, which is still split rather than stalling the read.
+- **`Get-OffsetString` results no longer depend on `-WindowSize`.** Because seam splits
+  inflated the count, the same file returned different results at different window sizes.
+  Verified on `ntdll.dll` (2,517,928 bytes): 32,506 strings at every window size from 4 KiB
+  to 64 MiB, previously 32,507 at the 1 MiB default versus 32,506 unwindowed.
+- **`Get-OffsetIOC`'s `PrintableStringCount` is now deterministic** for files larger than the
+  default window. It calls `Get-OffsetString` and exposes no `-WindowSize`, so it inherited
+  the seam-split inflation with no way for a caller to control it.
+
+### Changed
+
+- Cross-engine parity with the native [OffsetScan](https://github.com/warpedatom/OffsetScan)
+  engine is now exact for string extraction. `Get-OffsetString` and `offsetscan strings`
+  return set-identical results (offset, encoding, and value) on `ntdll.dll` — 32,506 hits,
+  zero entries unique to either engine, holding even at a 4 KiB window (~600 seams).
+  OffsetScan 0.1.1 fixes the corresponding defect on its side.
+
+### Added
+
+- Regression tests for ASCII and UTF-16LE strings straddling a window seam, window-size
+  independence of the result set, and the trailing-run measurement itself (including the
+  NUL-padding and run-fills-the-buffer cases that keep the carry-over bounded).
+
 ## [3.1.0] - 2026-07-19
 
 All-additive minor release. Existing commands, parameters, and output-schema field
