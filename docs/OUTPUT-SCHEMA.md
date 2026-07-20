@@ -53,6 +53,81 @@ OffsetInspect keeps public property names stable within major version 2. Additiv
 | `Inspection` | `OffsetInspect.Result` or null | Nested context at the mapped boundary |
 | `Warnings` / `Error` | String[] / String | Interpretation notes or failure reason |
 
+## `OffsetInspect.DetectionTrigger`
+
+Produced by `Get-OffsetDetectionTrigger` (and attached as the `Trigger` property of a
+`ThreatScanResult` when `Export-OffsetThreatReport -IncludeTrigger` is used). Correlates a
+detection boundary to the file content that most likely produced it. Read-only and
+cross-platform (no scanner invocation). Added in 3.1.0.
+
+| Property | Type | Meaning |
+|---|---|---|
+| `File` | String | Canonical path analyzed |
+| `SignatureName` | String or null | Provider signature carried from the source result |
+| `BoundaryOffset` / `BoundaryHex` | Int64 / String | Last byte of the earliest detected prefix |
+| `BoundaryByteDecimal` / `BoundaryByteHex` | Int32 / String or null | Value of the boundary byte |
+| `Section` | String or null | PE section containing the boundary (`headers`/name), null for non-PE |
+| `RegionStart` / `RegionEnd` / `RegionSize` | Int64 / Int64 / Int | Inclusive bounds of the analyzed window |
+| `PreBoundaryEntropy` | Double | Shannon entropy (bits/byte) of the run up to the boundary — low suggests plaintext, high suggests packed/encoded |
+| `CandidateStrings` | Object[] | Extracted strings ending at or straddling the boundary, ranked by proximity. Each has `Offset`, `OffsetHex`, `Encoding`, `Length`, `Value`, `EndsAtOffset`, `EndsAtHex`, `ContainsBoundary`, `DistanceToBoundary` |
+| `Interpretation` | String | One-line heuristic read of the likely trigger |
+| `HexDump` | Object[] | Structured hex rows for the window with the boundary byte highlighted |
+
+## `OffsetInspect.DriftEntry`
+
+One append-only snapshot written to the NDJSON drift journal by `Add-OffsetDriftEntry` (one
+JSON object per line). Records both what the scan saw and what the provider knew, so detection
+changes can later be attributed to the file or to the signatures. Added in 3.1.0.
+
+| Property | Type | Meaning |
+|---|---|---|
+| `TimestampUtc` | String | ISO-8601 time the snapshot was recorded |
+| `File` | String | Canonical file path |
+| `FileSha256` | String | Content hash (distinguishes a modified sample from a signature change) |
+| `FileSize` | Int64 | File length in bytes |
+| `Engine` | String or null | Provider label (AMSI/Defender/...) |
+| `Status` | String or null | Recorded detection status |
+| `Detected` | Boolean | Whether `Status` is a positive detection |
+| `DetectionBoundaryOffset` | Int64 or null | Boundary offset at scan time |
+| `SignatureName` | String or null | Provider signature name |
+| `SignatureVersion` | String or null | Defender antivirus signature version (null off Windows / no Defender) |
+| `EngineVersion` | String or null | Defender AM engine version |
+| `Host` | String | Machine name the snapshot was taken on |
+
+## `OffsetInspect.DriftReport`
+
+Produced by `Get-OffsetDrift` — one per file, summarizing its journal history and explaining
+each transition. Added in 3.1.0.
+
+| Property | Type | Meaning |
+|---|---|---|
+| `File` | String | File the report covers |
+| `SnapshotCount` | Int32 | Number of journal entries for the file |
+| `DistinctHashes` | Int32 | Distinct SHA-256 values seen (>1 means the sample changed over time) |
+| `FirstSeenUtc` / `LastSeenUtc` | String | Bounds of the recorded history |
+| `CurrentStatus` | String or null | Status of the most recent snapshot |
+| `EverChanged` | Boolean | Whether any status/boundary/hash change occurred |
+| `Transitions` | Object[] | Per-consecutive-pair analysis. Each has `From*`/`To*` fields, the boolean change flags (`StatusChanged`, `HashChanged`, `SignatureChanged`, `BoundaryChanged`, `SignatureVersionChanged`), and an `Explanation` disambiguating file-change vs signature-drift vs non-deterministic |
+| `Snapshots` | Object[] | The ordered `DriftEntry` records |
+
+## `OffsetInspect.MutationTestResult`
+
+Produced by `Invoke-OffsetMutationTest` (authorized engagements only). Reports how robust a
+signature is by perturbing a detected sample in memory and re-scanning each variant with AMSI.
+No variant is written to disk. Added in 3.1.0.
+
+| Property | Type | Meaning |
+|---|---|---|
+| `File` | String | Sample tested |
+| `Engine` | String | Always `AMSI` (in-memory) |
+| `BaselineStatus` | String | AMSI status of the unmodified sample |
+| `BaselineDetected` | Boolean | Whether the baseline is a positive detection (results are only meaningful when true) |
+| `TargetToken` | String or null | Longest distinctive token the string transforms perturb |
+| `TransformsTested` | String[] | Transform classes applied |
+| `Results` | Object[] | One per transform: `Transform`, `VariantStatus`, `Evaded` (baseline detected but variant not), `Note` |
+| `EvasionCount` | Int32 | How many transform classes neutralized detection |
+| `RobustnessSummary` | String | One-line read of signature brittleness |
+
 ## Serialization
 
 - `Invoke-OffsetInspect -Json` always emits an array.

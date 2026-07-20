@@ -36,15 +36,15 @@ AfterAll {
     Remove-Module OffsetInspect -Force -ErrorAction SilentlyContinue
 }
 Describe 'OffsetInspect module package' {
-    It 'has a valid 3.0.0 manifest' {
+    It 'has a valid 3.1.0 manifest' {
         $manifest = Test-ModuleManifest -Path $ManifestPath -ErrorAction Stop
-        $manifest.Version.ToString() | Should -Be '3.0.0'
+        $manifest.Version.ToString() | Should -Be '3.1.0'
         $manifest.RootModule | Should -Be 'OffsetInspect.psm1'
     }
 
     It 'exports only the supported public commands' {
         $commands = @(Get-Command -Module OffsetInspect | Select-Object -ExpandProperty Name | Sort-Object)
-        ($commands -join ',') | Should -Be 'Compare-OffsetThreatResult,Export-OffsetThreatReport,Get-OffsetEntropy,Get-OffsetIOC,Get-OffsetPEInfo,Get-OffsetString,Invoke-OffsetClamScan,Invoke-OffsetInspect,Invoke-OffsetThreatScan,Invoke-OffsetThreatScanBatch,Invoke-OffsetThreatScanRegion,Invoke-OffsetYaraScan'
+        ($commands -join ',') | Should -Be 'Add-OffsetDriftEntry,Compare-OffsetThreatResult,Export-OffsetThreatReport,Get-OffsetDetectionTrigger,Get-OffsetDrift,Get-OffsetEntropy,Get-OffsetIOC,Get-OffsetPEInfo,Get-OffsetString,Invoke-OffsetClamScan,Invoke-OffsetInspect,Invoke-OffsetMutationTest,Invoke-OffsetThreatScan,Invoke-OffsetThreatScanBatch,Invoke-OffsetThreatScanRegion,Invoke-OffsetYaraScan'
     }
 
     It 'imports from an isolated Gallery-style folder' {
@@ -1565,6 +1565,219 @@ Describe 'IOC panel and report enrichment' {
         $text = Get-Content -LiteralPath $out -Raw
         $text | Should -Match '### Indicators'
         $text | Should -Match '900150983cd24fb0d6963f7d28e17f72'
+    }
+
+    It 'sources the indicators panel from an OffsetScan ioc JSON dump' {
+        $target = Join-Path $TestDrive 'sample.exe'
+        $iocJson = Join-Path $TestDrive 'ioc.json'
+        # Schema-identical to Get-OffsetIOC / offsetscan output. Sentinel hash values
+        # that a live scan could never produce, to prove the panel came from the JSON.
+        $panel = [pscustomobject]@{
+            File = $target; FileSize = 4096
+            MD5 = 'ffffffffffffffffffffffffffffffff'; SHA1 = ('1' * 40); SHA256 = ('2' * 64)
+            OverallEntropy = 6.5; HighEntropyWindows = 3; PrintableStringCount = 42
+            IsPE = $true; Machine = 'x64 (AMD64)'
+            ImpHash = 'abcdef0123456789abcdef0123456789'; ImportedDllCount = 7
+            HasOverlay = $false; OverlaySize = 0
+        }
+        # Force a genuine JSON array [ {...} ] to match offsetscan's real output shape
+        # (and exercise the WinPS 5.1 module-scope array-parsing path deterministically).
+        $panelJson = '[' + (ConvertTo-Json -InputObject $panel -Depth 6 -Compress) + ']'
+        Set-Content -LiteralPath $iocJson -Value $panelJson -Encoding UTF8
+        $result = [pscustomobject]@{ Success = $true; File = $target; InitialStatus = 'NotDetected'; ProbeLog = @(); Warnings = @() }
+        $out = Join-Path $TestDrive 'ingest-report.md'
+        $null = $result | Export-OffsetThreatReport -Path $out -IocJsonPath $iocJson
+        $text = Get-Content -LiteralPath $out -Raw
+        $text | Should -Match '### Indicators'
+        $text | Should -Match 'ffffffffffffffffffffffffffffffff'
+        $text | Should -Match 'abcdef0123456789abcdef0123456789'
+    }
+
+    It 'leaves a record unenriched when its file is absent from the JSON and -IncludeIoc is not set' {
+        $iocJson = Join-Path $TestDrive 'ioc-empty.json'
+        '[]' | Set-Content -LiteralPath $iocJson -Encoding UTF8
+        $result = [pscustomobject]@{ Success = $true; File = (Join-Path $TestDrive 'missing.exe'); InitialStatus = 'NotDetected'; ProbeLog = @(); Warnings = @() }
+        $out = Join-Path $TestDrive 'ingest-miss.md'
+        $null = $result | Export-OffsetThreatReport -Path $out -IocJsonPath $iocJson
+        (Get-Content -LiteralPath $out -Raw) | Should -Not -Match '### Indicators'
+    }
+}
+
+Describe 'Detection-trigger correlation' {
+    It 'core: identifies the string ending at the boundary and reads it as textual' {
+        $region = [System.Text.Encoding]::ASCII.GetBytes('AAAA MarkerAlpha')
+        $t = InModuleScope OffsetInspect -Parameters @{ Region = $region } {
+            param($Region)
+            Get-OIDetectionTrigger -RegionBytes $Region -RegionStart 0 -BoundaryOffset 15 -FileSize 16 -MinimumLength 4
+        }
+        $t.CandidateStrings[0].ContainsBoundary | Should -BeTrue
+        $t.CandidateStrings[0].Value | Should -Match 'MarkerAlpha'
+        $t.Interpretation | Should -Match 'textual'
+        $t.Interpretation | Should -Match 'MarkerAlpha'
+        $t.Section | Should -BeNullOrEmpty
+    }
+
+    It 'core: flags a high-entropy boundary region as binary/packed' {
+        $rng = [byte[]]::new(64)
+        (New-Object Random 7).NextBytes($rng)
+        $t = InModuleScope OffsetInspect -Parameters @{ Region = $rng } {
+            param($Region)
+            Get-OIDetectionTrigger -RegionBytes $Region -RegionStart 0 -BoundaryOffset 63 -FileSize 64 -MinimumLength 4
+        }
+        $t.PreBoundaryEntropy | Should -BeGreaterThan 5.0
+    }
+
+    It 'public: analyzes a file at an explicit boundary offset' {
+        $path = Join-Path $TestDrive 'trig.bin'
+        [System.IO.File]::WriteAllBytes($path, [System.Text.Encoding]::ASCII.GetBytes('prefix MarkerBravo more'))
+        $boundary = ('prefix MarkerBravo').Length - 1
+        $t = Get-OffsetDetectionTrigger -FilePath $path -BoundaryOffset $boundary
+        $t.BoundaryOffset | Should -Be $boundary
+        $t.CandidateStrings.Count | Should -BeGreaterThan 0
+        (@($t.CandidateStrings).Value -join ' ') | Should -Match 'MarkerBravo'
+    }
+
+    It 'public: enriches a threat result from the pipeline and skips results with no boundary' {
+        $path = Join-Path $TestDrive 'trig2.bin'
+        [System.IO.File]::WriteAllBytes($path, [System.Text.Encoding]::ASCII.GetBytes('prefix MarkerBravo more'))
+        $boundary = ('prefix MarkerBravo').Length - 1
+        $detected = [pscustomobject]@{ Success = $true; File = $path; DetectionBoundaryOffset = $boundary; SignatureName = 'Test/Sig' }
+        $t = $detected | Get-OffsetDetectionTrigger
+        $t.SignatureName | Should -Be 'Test/Sig'
+        $t.BoundaryHex | Should -Match '^0x'
+
+        $noBoundary = [pscustomobject]@{ Success = $true; File = $path; DetectionBoundaryOffset = $null }
+        @($noBoundary | Get-OffsetDetectionTrigger).Count | Should -Be 0
+    }
+
+    It 'report: -IncludeTrigger renders a Detection trigger section with the candidate string' {
+        $path = Join-Path $TestDrive 'trig3.bin'
+        [System.IO.File]::WriteAllBytes($path, [System.Text.Encoding]::ASCII.GetBytes('prefix MarkerBravo more'))
+        $boundary = ('prefix MarkerBravo').Length - 1
+        $result = [pscustomobject]@{
+            Success = $true; File = $path; InitialStatus = 'Detected'; DetectionBoundaryOffset = $boundary
+            SignatureName = 'Test/Sig'; ProbeLog = @(); Warnings = @()
+        }
+        $out = Join-Path $TestDrive 'trig-report.md'
+        $null = $result | Export-OffsetThreatReport -Path $out -IncludeTrigger
+        $md = Get-Content -LiteralPath $out -Raw
+        $md | Should -Match '### Detection trigger'
+        $md | Should -Match 'MarkerBravo'
+    }
+}
+
+Describe 'Detection-drift journal' {
+    It 'core: reads a status change with no file change but a signature update as signature drift' {
+        $snaps = @(
+            [pscustomobject]@{ TimestampUtc = '2026-01-01T00:00:00Z'; File = 'C:\s.ps1'; FileSha256 = 'aaa'; Status = 'Detected'; SignatureName = 'Sig/X'; DetectionBoundaryOffset = 100; SignatureVersion = '1.400.1.0' },
+            [pscustomobject]@{ TimestampUtc = '2026-02-01T00:00:00Z'; File = 'C:\s.ps1'; FileSha256 = 'aaa'; Status = 'NotDetected'; SignatureName = $null; DetectionBoundaryOffset = $null; SignatureVersion = '1.410.9.0' }
+        )
+        $d = InModuleScope OffsetInspect -Parameters @{ S = $snaps } { param($S) Compare-OIDriftTimeline -Snapshots $S }
+        $d.SnapshotCount | Should -Be 2
+        $d.EverChanged | Should -BeTrue
+        $d.Transitions[0].StatusChanged | Should -BeTrue
+        $d.Transitions[0].HashChanged | Should -BeFalse
+        $d.Transitions[0].Explanation | Should -Match 'signature drift'
+    }
+
+    It 'core: reads a status change alongside a hash change as a file modification' {
+        $snaps = @(
+            [pscustomobject]@{ TimestampUtc = '2026-01-01T00:00:00Z'; File = 'C:\s.ps1'; FileSha256 = 'aaa'; Status = 'Detected'; SignatureName = 'Sig/X'; DetectionBoundaryOffset = 100; SignatureVersion = '1.400.1.0' },
+            [pscustomobject]@{ TimestampUtc = '2026-02-01T00:00:00Z'; File = 'C:\s.ps1'; FileSha256 = 'bbb'; Status = 'NotDetected'; SignatureName = $null; DetectionBoundaryOffset = $null; SignatureVersion = '1.400.1.0' }
+        )
+        $d = InModuleScope OffsetInspect -Parameters @{ S = $snaps } { param($S) Compare-OIDriftTimeline -Snapshots $S }
+        $d.DistinctHashes | Should -Be 2
+        $d.Transitions[0].HashChanged | Should -BeTrue
+        $d.Transitions[0].Explanation | Should -Match 'File content changed'
+    }
+
+    It 'core: reads a status change with no file or signature change as non-deterministic' {
+        $snaps = @(
+            [pscustomobject]@{ TimestampUtc = '2026-01-01T00:00:00Z'; File = 'C:\s.ps1'; FileSha256 = 'aaa'; Status = 'Detected'; SignatureName = 'Sig/X'; DetectionBoundaryOffset = 100; SignatureVersion = '1.400.1.0' },
+            [pscustomobject]@{ TimestampUtc = '2026-02-01T00:00:00Z'; File = 'C:\s.ps1'; FileSha256 = 'aaa'; Status = 'NotDetected'; SignatureName = $null; DetectionBoundaryOffset = $null; SignatureVersion = '1.400.1.0' }
+        )
+        $d = InModuleScope OffsetInspect -Parameters @{ S = $snaps } { param($S) Compare-OIDriftTimeline -Snapshots $S }
+        $d.Transitions[0].Explanation | Should -Match 'non-deterministic'
+    }
+
+    It 'public: records snapshots and reports a file-modification transition end to end' {
+        $journal = Join-Path $TestDrive 'drift.ndjson'
+        $file = Join-Path $TestDrive 'evolving.bin'
+        [System.IO.File]::WriteAllBytes($file, [System.Text.Encoding]::ASCII.GetBytes('version-one'))
+        $null = Add-OffsetDriftEntry -FilePath $file -Status Detected -Engine AMSI -SignatureName 'Sig/A' -JournalPath $journal
+        [System.IO.File]::WriteAllBytes($file, [System.Text.Encoding]::ASCII.GetBytes('version-two-different-length'))
+        $null = Add-OffsetDriftEntry -FilePath $file -Status NotDetected -Engine AMSI -JournalPath $journal
+
+        $drift = Get-OffsetDrift -JournalPath $journal -FilePath $file
+        $drift.SnapshotCount | Should -Be 2
+        $drift.DistinctHashes | Should -Be 2
+        $drift.CurrentStatus | Should -Be 'NotDetected'
+        $drift.Transitions[0].HashChanged | Should -BeTrue
+        $drift.Transitions[0].Explanation | Should -Match 'File content changed'
+    }
+
+    It 'public: records a snapshot from a threat-result object' {
+        $journal = Join-Path $TestDrive 'drift-result.ndjson'
+        $file = Join-Path $TestDrive 'res.bin'
+        [System.IO.File]::WriteAllBytes($file, [System.Text.Encoding]::ASCII.GetBytes('abc'))
+        $result = [pscustomobject]@{ File = $file; InitialStatus = 'Detected'; Engine = 'AMSI'; DetectionBoundaryOffset = 2; SignatureName = 'Sig/Z'; FileSize = 3 }
+        $entry = $result | Add-OffsetDriftEntry -JournalPath $journal
+        $entry.Status | Should -Be 'Detected'
+        $entry.Detected | Should -BeTrue
+        $entry.SignatureName | Should -Be 'Sig/Z'
+        $entry.FileSha256 | Should -Be 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+        @(Get-Content -LiteralPath $journal).Count | Should -Be 1
+    }
+}
+
+Describe 'Signature-robustness mutation testing' {
+    It 'core: inverts case across the whole content' {
+        $v = InModuleScope OffsetInspect { Get-OIMutationVariant -Content 'AbC-123' -Transform 'CaseInversion' }
+        $v | Should -Be 'aBc-123'
+    }
+
+    It 'core: locates the longest distinctive token' {
+        $span = InModuleScope OffsetInspect { Get-OILongestTokenSpan -Content 'ok SUPERBADTOKEN ok' }
+        $span.Value | Should -Be 'SUPERBADTOKEN'
+    }
+
+    It 'core: token transforms break the distinctive token' {
+        foreach ($t in 'StringConcatenation', 'CommentInsertion', 'WhitespaceInjection') {
+            $v = InModuleScope OffsetInspect -Parameters @{ T = $t } {
+                param($T)
+                $c = 'ok SUPERBADTOKEN ok'
+                Get-OIMutationVariant -Content $c -Transform $T -TokenSpan (Get-OILongestTokenSpan -Content $c)
+            }
+            $v | Should -Not -Be 'ok SUPERBADTOKEN ok'
+            $v | Should -Not -Match 'SUPERBADTOKEN'
+        }
+    }
+
+    It 'core: reports which transforms neutralized a detected token (injected scanner)' {
+        $fake = { param($t) if ($t -cmatch 'SUPERBADTOKEN') { 'Detected' } else { 'NotDetected' } }
+        $set = InModuleScope OffsetInspect -Parameters @{ C = 'ok SUPERBADTOKEN ok'; T = @('CaseInversion', 'StringConcatenation', 'CommentInsertion', 'WhitespaceInjection'); S = $fake } {
+            param($C, $T, $S)
+            Test-OIMutationSet -Content $C -Transforms $T -Scanner $S
+        }
+        $set.BaselineDetected | Should -BeTrue
+        $set.TargetToken | Should -Be 'SUPERBADTOKEN'
+        $set.EvasionCount | Should -Be 4
+    }
+
+    It 'core: reports nothing to test when the baseline is not detected' {
+        $fake = { param($t) if ($t -cmatch 'SUPERBADTOKEN') { 'Detected' } else { 'NotDetected' } }
+        $set = InModuleScope OffsetInspect -Parameters @{ C = 'totally benign text with a longword'; T = @('CaseInversion'); S = $fake } {
+            param($C, $T, $S)
+            Test-OIMutationSet -Content $C -Transforms $T -Scanner $S
+        }
+        $set.BaselineDetected | Should -BeFalse
+        $set.EvasionCount | Should -Be 0
+    }
+
+    It 'public: refuses to run without the authorization acknowledgement' {
+        $f = Join-Path $TestDrive 'sample.txt'
+        Set-Content -LiteralPath $f -Value 'hello world'
+        { Invoke-OffsetMutationTest -FilePath $f -AuthorizedEngagement:$false } | Should -Throw -ExpectedMessage '*authorized*'
     }
 }
 

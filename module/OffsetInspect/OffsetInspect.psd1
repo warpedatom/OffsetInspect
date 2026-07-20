@@ -1,6 +1,6 @@
 @{
     RootModule           = 'OffsetInspect.psm1'
-    ModuleVersion        = '3.0.0'
+    ModuleVersion        = '3.1.0'
     GUID                 = '2d9f6f83-2c4f-4a6e-8a53-1cf9a5fbc2f6'
     Author               = 'Jared Perry (Velkris)'
     CompanyName          = 'DreadHost Research'
@@ -26,18 +26,25 @@
         'Private/Threat.Batch.ps1',
         'Private/Threat.ClamAV.ps1',
         'Private/Threat.Defender.ps1',
+        'Private/Threat.Drift.ps1',
+        'Private/Threat.Mutation.ps1',
         'Private/Threat.Region.ps1',
         'Private/Threat.Search.ps1',
         'Private/Threat.Text.ps1',
+        'Private/Threat.Trigger.ps1',
         'Private/Threat.Yara.ps1',
         'Public/Invoke-OffsetInspect.ps1',
+        'Public/Invoke-OffsetMutationTest.ps1',
         'Public/Invoke-OffsetThreatScan.ps1',
         'Public/Invoke-OffsetThreatScanBatch.ps1',
         'Public/Invoke-OffsetThreatScanRegion.ps1',
         'Public/Invoke-OffsetYaraScan.ps1',
         'Public/Invoke-OffsetClamScan.ps1',
         'Public/Export-OffsetThreatReport.ps1',
+        'Public/Add-OffsetDriftEntry.ps1',
         'Public/Compare-OffsetThreatResult.ps1',
+        'Public/Get-OffsetDetectionTrigger.ps1',
+        'Public/Get-OffsetDrift.ps1',
         'Public/Get-OffsetEntropy.ps1',
         'Public/Get-OffsetIOC.ps1',
         'Public/Get-OffsetString.ps1',
@@ -46,6 +53,7 @@
 
     FunctionsToExport = @(
         'Invoke-OffsetInspect',
+        'Invoke-OffsetMutationTest',
         'Invoke-OffsetThreatScan',
         'Invoke-OffsetThreatScanBatch',
         'Invoke-OffsetThreatScanRegion',
@@ -53,6 +61,9 @@
         'Invoke-OffsetClamScan',
         'Export-OffsetThreatReport',
         'Compare-OffsetThreatResult',
+        'Add-OffsetDriftEntry',
+        'Get-OffsetDetectionTrigger',
+        'Get-OffsetDrift',
         'Get-OffsetEntropy',
         'Get-OffsetIOC',
         'Get-OffsetString',
@@ -79,6 +90,15 @@
             LicenseUri = 'https://github.com/warpedatom/OffsetInspect/blob/main/LICENSE'
             ProjectUri = 'https://github.com/warpedatom/OffsetInspect'
             ReleaseNotes = @'
+OffsetInspect 3.1.0
+- All-additive minor release; existing commands, parameters, and output-schema field meanings are unchanged.
+- Adds Get-OffsetDetectionTrigger: correlates a detection boundary to the content that most likely produced it (PE section, pre-boundary entropy, and the extracted strings ending at or straddling the boundary as candidate signature content), with a one-line interpretation. Read-only and cross-platform.
+- Adds detection-drift journaling: Add-OffsetDriftEntry records append-only NDJSON snapshots (file SHA-256, status, boundary, signature, and the local Defender signature/engine versions), and Get-OffsetDrift explains each change as a file modification, a signature-database update, or a non-deterministic provider result.
+- Export-OffsetThreatReport gains -IocJsonPath (source IOC panels from the native OffsetScan engine's JSON instead of re-scanning each file in PowerShell) and -IncludeTrigger (embed detection-trigger analysis in the report).
+- Adds Invoke-OffsetMutationTest (authorized engagements only): tests signature robustness by perturbing a detected sample in memory (case inversion, string concatenation, comment insertion, whitespace injection) and re-scanning each variant with AMSI to report which transform classes neutralize detection. No variant is written to disk; requires -AuthorizedEngagement.
+- Hardens Windows PowerShell 5.1 module-scope parsing of top-level JSON arrays for the new ingestion path.
+- New output objects documented in docs/OUTPUT-SCHEMA.md: DetectionTrigger, DriftEntry, DriftReport.
+
 OffsetInspect 3.0.0
 - Major-version bump for a large, all-additive capability expansion; existing 2.x commands, parameters, and output-schema field meanings are unchanged.
 - Adds a per-probe audit trail: Invoke-OffsetThreatScan results expose ProbeLog (Sequence, PrefixLength, Status, ProviderResult, SignatureName, Cacheable, ElapsedMs, TimestampUtc), streamed live to -Verbose, surfaced as ProbeCount in CSV, and exportable with -ProbeLogPath.
