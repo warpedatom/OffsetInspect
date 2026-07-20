@@ -115,7 +115,9 @@ function Export-OffsetThreatReport {
             $parsedJson = ConvertFrom-Json -InputObject $rawJson
             $iocRecords = New-Object 'System.Collections.Generic.List[object]'
             foreach ($candidate in @($parsedJson)) {
-                if ($candidate -is [System.Collections.IEnumerable] -and $candidate -isnot [string]) {
+                # A JSON array deserializes to an enumerable (Object[]); a lone JSON object to a
+                # PSCustomObject, which is NOT itself enumerable and must be added as one record.
+                if ($candidate -is [System.Collections.IEnumerable] -and $candidate -isnot [string] -and $candidate -isnot [pscustomobject]) {
                     foreach ($inner in $candidate) { $iocRecords.Add($inner) }
                 }
                 else {

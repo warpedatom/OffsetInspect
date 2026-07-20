@@ -1700,6 +1700,16 @@ Describe 'Detection-drift journal' {
         $d.Transitions[0].Explanation | Should -Match 'non-deterministic'
     }
 
+    It 'core: reads a pure signature-name change as provider reclassification' {
+        $snaps = @(
+            [pscustomobject]@{ TimestampUtc = '2026-01-01T00:00:00Z'; File = 'C:\s.ps1'; FileSha256 = 'aaa'; Status = 'Detected'; SignatureName = 'Trojan:X/A'; DetectionBoundaryOffset = 100; SignatureVersion = '1.400.1.0' },
+            [pscustomobject]@{ TimestampUtc = '2026-02-01T00:00:00Z'; File = 'C:\s.ps1'; FileSha256 = 'aaa'; Status = 'Detected'; SignatureName = 'Trojan:X/B'; DetectionBoundaryOffset = 100; SignatureVersion = '1.400.1.0' }
+        )
+        $d = InModuleScope OffsetInspect -Parameters @{ S = $snaps } { param($S) Compare-OIDriftTimeline -Snapshots $S }
+        $d.Transitions[0].SignatureChanged | Should -BeTrue
+        $d.Transitions[0].Explanation | Should -Match 'reclassification'
+    }
+
     It 'public: records snapshots and reports a file-modification transition end to end' {
         $journal = Join-Path $TestDrive 'drift.ndjson'
         $file = Join-Path $TestDrive 'evolving.bin'

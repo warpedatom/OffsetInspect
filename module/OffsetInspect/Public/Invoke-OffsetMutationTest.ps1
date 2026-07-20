@@ -19,6 +19,8 @@ function Invoke-OffsetMutationTest {
 
     .PARAMETER FilePath
         The sample to test. Must currently be detected by AMSI for the results to be meaningful.
+        Read as text (UTF-8, BOM-aware); the transforms are script/text-oriented, so this command
+        targets script-style samples rather than arbitrary binaries.
 
     .PARAMETER AuthorizedEngagement
         Required acknowledgement that you are authorized to test this sample. The command will

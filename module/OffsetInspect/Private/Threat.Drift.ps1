@@ -135,6 +135,10 @@ function Compare-OIDriftTimeline {
         elseif ($sigVerChanged) {
             "Signatures updated ($fromVer -> $toVer) with no change in detection."
         }
+        elseif ($signatureChanged) {
+            # By this point status, hash, boundary, and version are all unchanged.
+            'Signature name changed with the file, status, and boundary unchanged - provider reclassification or rule re-labeling.'
+        }
         else {
             'No change.'
         }

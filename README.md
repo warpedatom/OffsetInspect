@@ -311,7 +311,7 @@ Each transition is labelled: a SHA-256 change reads as a **file modification**; 
 
 ### Signature-robustness testing (authorized use only)
 
-`Invoke-OffsetMutationTest` answers a detection-engineering question: is a signature a brittle exact-literal match, or is it robust to common obfuscation? Given a sample AMSI currently detects, it applies standard perturbations — case inversion, string-literal concatenation, comment insertion, whitespace injection — and re-scans each variant to report which classes neutralize detection. **Everything happens in memory** via AMSI's in-process interface; no variant is written to disk, so no evasive artifacts are produced and Defender real-time protection is not involved. The command refuses to run without `-AuthorizedEngagement`, and is intended only for samples you are authorized to test.
+`Invoke-OffsetMutationTest` answers a detection-engineering question: is a signature a brittle exact-literal match, or is it robust to common obfuscation? Given a sample that AMSI currently detects, it applies standard perturbations — case inversion, string-literal concatenation, comment insertion, whitespace injection — and re-scans each variant to report which classes neutralize detection. **Everything happens in memory** via AMSI's in-process interface; no variant is written to disk, so no evasive artifacts are produced and Defender real-time protection is not involved. The command refuses to run without `-AuthorizedEngagement`, and is intended only for samples you are authorized to test.
 
 ```powershell
 Invoke-OffsetMutationTest -FilePath ./flagged.ps1 -AuthorizedEngagement |
