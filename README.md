@@ -41,7 +41,7 @@ It also provides an OffsetInspect-native detection-boundary workflow inspired by
 - Tests signature robustness for authorized engagements by perturbing a detected sample **in memory** (case, concatenation, comment, whitespace) and reporting which transform classes evade — no variant is ever written to disk.
 - Adds static malware-triage helpers: per-window entropy (packed/encrypted regions), ASCII/UTF-16LE string extraction with offsets, and PE header/section/import parsing with imphash and overlay detection.
 - Never changes Defender exclusions, real-time protection, or system security configuration.
-- Ships as a self-contained PowerShell Gallery package with no external runtime dependencies (YARA scanning is the one optional exception, requiring the YARA engine).
+- Ships as a self-contained PowerShell Gallery package with no external runtime dependencies; YARA and ClamAV scanning are the only optional exceptions, each requiring its own external engine.
 
 ## Commands
 
@@ -388,7 +388,7 @@ Three cross-platform static-analysis commands support malware triage and compose
 
 - `Get-OffsetEntropy` — per-window Shannon entropy (bits/byte) to locate packed or encrypted regions; cross-reference the flagged windows with `Invoke-OffsetThreatScanRegion` detections.
 - `Get-OffsetString` — printable ASCII and UTF-16LE strings with byte offsets; pipe offsets into `Invoke-OffsetInspect` for context.
-- `Get-OffsetPEInfo` — PE machine/bitness, entry point, section table, **imports and imphash**, appended-**overlay** detection, and resource size, with `-Offset` mapping a byte offset to its section (`.text`, `.rsrc`, ...). Imphash uses the standard `library.function` MD5; ordinal-only imports render as `ordNNN` (special-library ordinal resolution is not applied, so ordinal-heavy imphashes may differ from pefile's).
+- `Get-OffsetPEInfo` — PE machine/bitness, entry point, section table, **imports and imphash**, appended-**overlay** detection, and resource size, with `-Offset` mapping a byte offset to its section (`.text`, `.rsrc`, ...). Imphash uses the standard `library.function` MD5 and is verified byte-identical to pefile/VirusTotal — including special-library ordinal resolution, so an ordinal imported from `ws2_32`/`wsock32`/`oleaut32` resolves to its real function name; every other ordinal import renders `ordNNN`, exactly as pefile does.
 - `Get-OffsetIOC` — one-shot indicator panel combining the above: MD5/SHA-1/SHA-256 (single-pass), overall entropy, printable-string count, and PE machine/imphash/overlay when applicable.
 
 ```powershell
