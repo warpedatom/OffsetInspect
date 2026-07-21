@@ -9,6 +9,36 @@ All notable changes to OffsetInspect are documented in this file. The project fo
 - Additional provider adapters after the v2 provider contract has received field testing.
 - Published benchmark baselines for representative text and binary corpora.
 
+## [3.1.2] - 2026-07-20
+
+Bug-fix release. No command, parameter, or output-schema changes.
+
+### Fixed
+
+- **`Get-OffsetPEInfo` and `Get-OffsetIOC` returned a null `ImpHash` and zero imports for
+  every 32-bit (PE32) binary.** The ordinal-import flag was constructed as
+  `[uint64]0x80000000`, but PowerShell parses the literal `0x80000000` as the negative
+  `Int32` value `-2147483648`, and casting a negative number to `UInt64` throws. Import
+  parsing therefore aborted on its first statement for all PE32 files; the exception was
+  caught and recorded only in the `Warnings` collection, which `Get-OffsetIOC` does not
+  surface — so the failure was invisible. The PE32+ (x64) branch already used a hex-string
+  conversion to sidestep the same overflow class; the PE32 branch now does too. Verified
+  against `SysWOW64\kernel32.dll` (imphash `5c665927b146db2f5155688ad978e69f`, 102 imports)
+  and a 32-bit .NET assembly, both matching the native OffsetScan engine field-for-field.
+
+### Impact
+
+- imphash is a primary indicator for malware clustering, and a large fraction of malware
+  ships as 32-bit PE32. Prior versions silently produced no imphash for those samples, so a
+  triage row or report could omit the single most useful correlation key with no error
+  shown. Any 32-bit sample analyzed with 3.0.0–3.1.1 should be re-run.
+
+### Added
+
+- A regression test that builds a minimal but complete PE32 with a real import directory and
+  asserts a populated imphash and import list with no warnings. The previous PE test corpus
+  was entirely PE32+ (x64), so the 32-bit import path had no coverage.
+
 ## [3.1.1] - 2026-07-20
 
 Bug-fix release. No command, parameter, or output-schema changes.
