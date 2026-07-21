@@ -1,3 +1,61 @@
+function Get-OITrailingRunLength {
+    <#
+        Returns how many bytes at the end of a buffer could belong to a printable run
+        that continues into the next window. Get-OffsetString holds these bytes back and
+        re-reads them with the following window, so a string straddling a window seam is
+        reported once, whole, rather than split into two truncated halves.
+
+        An ASCII run is a trailing sequence of printable bytes; it stops at any non-
+        printable byte, so the NUL padding that dominates PE files yields 0 and the
+        carry-over stays small. A UTF-16LE run is a trailing sequence of printable/0x00
+        pairs, optionally preceded by a lone printable low byte whose 0x00 high byte
+        falls in the next window. The larger of the two is returned.
+
+        The result is always < $Bytes.Length so the caller is guaranteed to advance; a
+        single run longer than an entire window degenerates to the previous behaviour
+        (split at the seam) rather than stalling.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [byte[]]$Bytes,
+
+        [ValidateSet('Ascii', 'Unicode', 'Both')]
+        [string]$Encoding = 'Both'
+    )
+
+    if ($null -eq $Bytes -or $Bytes.Length -eq 0) { return 0 }
+    $count = $Bytes.Length
+
+    $asciiRun = 0
+    if ($Encoding -eq 'Ascii' -or $Encoding -eq 'Both') {
+        $i = $count - 1
+        while ($i -ge 0 -and $Bytes[$i] -ge 0x20 -and $Bytes[$i] -le 0x7E) {
+            $asciiRun++
+            $i--
+        }
+    }
+
+    $unicodeRun = 0
+    if ($Encoding -eq 'Unicode' -or $Encoding -eq 'Both') {
+        $i = $count - 1
+        if ($Bytes[$i] -ge 0x20 -and $Bytes[$i] -le 0x7E) {
+            # Lone low byte; its high byte is the first byte of the next window.
+            $unicodeRun++
+            $i--
+        }
+        while ($i -ge 1 -and $Bytes[$i] -eq 0x00 -and $Bytes[$i - 1] -ge 0x20 -and $Bytes[$i - 1] -le 0x7E) {
+            $unicodeRun += 2
+            $i -= 2
+        }
+    }
+
+    $carry = [Math]::Max($asciiRun, $unicodeRun)
+    if ($carry -ge $count) { $carry = 0 }
+    return $carry
+}
+
 function Get-OIByteString {
     <#
         Extracts printable ASCII and/or UTF-16LE strings from a byte buffer, tagging

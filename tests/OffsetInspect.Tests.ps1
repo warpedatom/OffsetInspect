@@ -36,9 +36,9 @@ AfterAll {
     Remove-Module OffsetInspect -Force -ErrorAction SilentlyContinue
 }
 Describe 'OffsetInspect module package' {
-    It 'has a valid 3.1.0 manifest' {
+    It 'has a valid 3.1.1 manifest' {
         $manifest = Test-ModuleManifest -Path $ManifestPath -ErrorAction Stop
-        $manifest.Version.ToString() | Should -Be '3.1.0'
+        $manifest.Version.ToString() | Should -Be '3.1.1'
         $manifest.RootModule | Should -Be 'OffsetInspect.psm1'
     }
 
@@ -1367,6 +1367,78 @@ Describe 'String extraction' {
         $hits = @(Get-OffsetString -FilePath $path -Encoding Ascii -MinimumLength 4 | Where-Object Value -eq 'MalwareStr')
         $hits.Count | Should -Be 1
         $hits[0].Offset | Should -Be 4
+    }
+
+    It 'reports an ASCII string straddling a window seam once, whole' {
+        # 'STRADDLINGVALUE' begins 5 bytes before the 4096-byte window boundary, so a
+        # naive windowed read would emit 'STRAD' and 'DLINGVALUE' as two truncated hits.
+        $window = 4096
+        $marker = 'STRADDLINGVALUE'
+        $bytes = New-Object byte[] ($window * 2)
+        $markerStart = $window - 5
+        [System.Text.Encoding]::ASCII.GetBytes($marker).CopyTo($bytes, $markerStart)
+        $path = Join-Path $TestDrive 'straddle-ascii.bin'
+        [System.IO.File]::WriteAllBytes($path, $bytes)
+
+        $hits = @(Get-OffsetString -FilePath $path -Encoding Ascii -MinimumLength 4 -WindowSize $window)
+        $hits.Count | Should -Be 1
+        $hits[0].Value | Should -Be $marker
+        $hits[0].Offset | Should -Be $markerStart
+    }
+
+    It 'reports a UTF-16LE string straddling a window seam once, whole' {
+        $window = 4096
+        $marker = 'WideStraddle'
+        $bytes = New-Object byte[] ($window * 2)
+        $markerStart = $window - 6
+        [System.Text.Encoding]::Unicode.GetBytes($marker).CopyTo($bytes, $markerStart)
+        $path = Join-Path $TestDrive 'straddle-unicode.bin'
+        [System.IO.File]::WriteAllBytes($path, $bytes)
+
+        $hits = @(Get-OffsetString -FilePath $path -Encoding Unicode -MinimumLength 4 -WindowSize $window)
+        $hits.Count | Should -Be 1
+        $hits[0].Value | Should -Be $marker
+        $hits[0].Offset | Should -Be $markerStart
+    }
+
+    It 'returns identical results regardless of window size' {
+        # Strings scattered across many seams; the result set must not depend on -WindowSize.
+        $bytes = New-Object byte[] 40000
+        for ($i = 0; $i -lt 39000; $i += 997) {
+            [System.Text.Encoding]::ASCII.GetBytes("Marker$i").CopyTo($bytes, $i)
+        }
+        $path = Join-Path $TestDrive 'window-independence.bin'
+        [System.IO.File]::WriteAllBytes($path, $bytes)
+
+        $baseline = @(Get-OffsetString -FilePath $path -MinimumLength 4 -WindowSize 65536 |
+                ForEach-Object { "$($_.Offset):$($_.Encoding):$($_.Value)" }) -join '|'
+        $baseline | Should -Not -BeNullOrEmpty
+
+        foreach ($size in 4096, 8192, 16384) {
+            $actual = @(Get-OffsetString -FilePath $path -MinimumLength 4 -WindowSize $size |
+                    ForEach-Object { "$($_.Offset):$($_.Encoding):$($_.Value)" }) -join '|'
+            $actual | Should -Be $baseline -Because "window size $size must not change the result set"
+        }
+    }
+
+    It 'measures the trailing run that may continue into the next window' {
+        $probe = {
+            param($B, $Enc)
+            Get-OITrailingRunLength -Bytes $B -Encoding $Enc
+        }
+
+        # Trailing printable ASCII run of 3.
+        $ascii = [byte[]](@(0x00, 0x00) + [System.Text.Encoding]::ASCII.GetBytes('abc'))
+        (InModuleScope OffsetInspect -Parameters @{ B = $ascii; Enc = 'Ascii' } $probe) | Should -Be 3
+
+        # NUL padding cannot continue a run, so nothing is held back. This is what keeps
+        # the carry-over small on PE files, which are mostly zero padding.
+        $padded = [byte[]](@(0x41, 0x42) + (@(0x00) * 8))
+        (InModuleScope OffsetInspect -Parameters @{ B = $padded; Enc = 'Both' } $probe) | Should -Be 0
+
+        # A run filling the whole buffer would stall the reader, so it is not held back.
+        $allPrintable = [System.Text.Encoding]::ASCII.GetBytes('AAAAAAAA')
+        (InModuleScope OffsetInspect -Parameters @{ B = $allPrintable; Enc = 'Ascii' } $probe) | Should -Be 0
     }
 }
 

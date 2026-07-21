@@ -1,6 +1,6 @@
 @{
     RootModule           = 'OffsetInspect.psm1'
-    ModuleVersion        = '3.1.0'
+    ModuleVersion        = '3.1.1'
     GUID                 = '2d9f6f83-2c4f-4a6e-8a53-1cf9a5fbc2f6'
     Author               = 'Jared Perry (Velkris)'
     CompanyName          = 'DreadHost Research'
@@ -90,6 +90,9 @@
             LicenseUri = 'https://github.com/warpedatom/OffsetInspect/blob/main/LICENSE'
             ProjectUri = 'https://github.com/warpedatom/OffsetInspect'
             ReleaseNotes = @'
+OffsetInspect 3.1.1
+- Fixes Get-OffsetString splitting a string that straddles a read-window seam into two truncated halves. A trailing run is now carried into the next window, so results no longer depend on -WindowSize. This also makes Get-OffsetIOC's PrintableStringCount deterministic for files larger than the 1 MiB default window.
+
 OffsetInspect 3.1.0
 - All-additive minor release; existing commands, parameters, and output-schema field meanings are unchanged.
 - Adds Get-OffsetDetectionTrigger: correlates a detection boundary to the content that most likely produced it (PE section, pre-boundary entropy, and the extracted strings ending at or straddling the boundary as candidate signature content), with a one-line interpretation. Read-only and cross-platform.
