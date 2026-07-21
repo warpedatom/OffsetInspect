@@ -36,9 +36,9 @@ AfterAll {
     Remove-Module OffsetInspect -Force -ErrorAction SilentlyContinue
 }
 Describe 'OffsetInspect module package' {
-    It 'has a valid 3.1.1 manifest' {
+    It 'has a valid 3.1.2 manifest' {
         $manifest = Test-ModuleManifest -Path $ManifestPath -ErrorAction Stop
-        $manifest.Version.ToString() | Should -Be '3.1.1'
+        $manifest.Version.ToString() | Should -Be '3.1.2'
         $manifest.RootModule | Should -Be 'OffsetInspect.psm1'
     }
 
@@ -1514,6 +1514,57 @@ Describe 'PE imports, overlay, and imphash' {
         $hash | Should -Be 'ac5547a4cef5a0a41523374a369ff4b1'
         $empty = InModuleScope OffsetInspect { Get-OIImpHash -Entry @() }
         $empty | Should -BeNullOrEmpty
+    }
+
+    It 'parses a 32-bit (PE32) import table and computes its imphash' {
+        # Regression: the ordinal-import flag was built as [uint64]0x80000000, but
+        # PowerShell parses 0x80000000 as the negative Int32 -2147483648, so the cast
+        # threw and import parsing aborted for EVERY 32-bit PE: null imphash, zero
+        # imports, the failure hidden in a swallowed warning. The whole prior PE test
+        # corpus was PE32+ (x64), so nothing exercised this path.
+        $bytes = New-Object byte[] 0x300
+        $bytes[0] = 0x4D; $bytes[1] = 0x5A                                   # MZ
+        [BitConverter]::GetBytes([int32]0x40).CopyTo($bytes, 0x3C)           # e_lfanew
+        $bytes[0x40] = 0x50; $bytes[0x41] = 0x45                             # PE\0\0
+        [BitConverter]::GetBytes([uint16]0x014C).CopyTo($bytes, 0x44)        # Machine = I386
+        [BitConverter]::GetBytes([uint16]1).CopyTo($bytes, 0x46)            # NumberOfSections
+        [BitConverter]::GetBytes([uint16]0xE0).CopyTo($bytes, 0x54)          # SizeOfOptionalHeader
+        [BitConverter]::GetBytes([uint16]0x10B).CopyTo($bytes, 0x58)         # Magic = PE32
+        [BitConverter]::GetBytes([uint32]0x1000).CopyTo($bytes, 0x68)        # AddressOfEntryPoint
+        [BitConverter]::GetBytes([uint32]0x400000).CopyTo($bytes, 0x74)      # ImageBase (PE32 = uint32)
+        [BitConverter]::GetBytes([uint32]16).CopyTo($bytes, 0xB4)            # NumberOfRvaAndSizes
+        [BitConverter]::GetBytes([uint32]0x200).CopyTo($bytes, 0xC0)         # Import dir RVA (data dir index 1)
+        [BitConverter]::GetBytes([uint32]40).CopyTo($bytes, 0xC4)            # Import dir Size
+        # Section table at optionalOffset(0x58) + SizeOfOptionalHeader(0xE0) = 0x138.
+        # VirtualAddress == PointerToRawData so RVA maps 1:1 to file offset in this range.
+        $sec = 0x138
+        [System.Text.Encoding]::ASCII.GetBytes('.idata').CopyTo($bytes, $sec)
+        [BitConverter]::GetBytes([uint32]0x100).CopyTo($bytes, $sec + 8)     # VirtualSize
+        [BitConverter]::GetBytes([uint32]0x200).CopyTo($bytes, $sec + 12)    # VirtualAddress
+        [BitConverter]::GetBytes([uint32]0x100).CopyTo($bytes, $sec + 16)    # SizeOfRawData
+        [BitConverter]::GetBytes([uint32]0x200).CopyTo($bytes, $sec + 20)    # PointerToRawData
+        # IMAGE_IMPORT_DESCRIPTOR at RVA/offset 0x200; a zeroed one at 0x214..0x228
+        # terminates the list, so every other structure must sit at 0x228 or later or
+        # its bytes would be misread as that terminator's fields (a second phantom import).
+        [BitConverter]::GetBytes([uint32]0x228).CopyTo($bytes, 0x200)        # OriginalFirstThunk (ILT RVA)
+        [BitConverter]::GetBytes([uint32]0x240).CopyTo($bytes, 0x200 + 12)   # Name RVA
+        [BitConverter]::GetBytes([uint32]0x230).CopyTo($bytes, 0x200 + 16)   # FirstThunk (IAT; unused, ILT present)
+        [BitConverter]::GetBytes([uint32]0x250).CopyTo($bytes, 0x228)        # ILT[0] -> IMAGE_IMPORT_BY_NAME (ILT[1]=0 at 0x22C)
+        [System.Text.Encoding]::ASCII.GetBytes("TEST.dll`0").CopyTo($bytes, 0x240)
+        [System.Text.Encoding]::ASCII.GetBytes("MyFunc`0").CopyTo($bytes, 0x252)  # hint(2 bytes) then name
+
+        $path = Join-Path $TestDrive 'sample-pe32-imports.bin'
+        [System.IO.File]::WriteAllBytes($path, $bytes)
+
+        $info = Get-OffsetPEInfo -FilePath $path
+        $info.Machine | Should -Be 'x86 (I386)'
+        $info.IsPE32Plus | Should -BeFalse
+        $info.Warnings | Should -BeNullOrEmpty
+        $info.ImportedDllCount | Should -Be 1
+        @($info.Imports)[0].Dll | Should -Be 'TEST.dll'
+        # Tie the imphash to the reference helper so the walk is proven to yield 'test.myfunc'.
+        $expected = InModuleScope OffsetInspect { Get-OIImpHash -Entry @('test.myfunc') }
+        $info.ImpHash | Should -Be $expected
     }
 
     It 'maps an RVA to a file offset via the section table' {

@@ -1,6 +1,6 @@
 @{
     RootModule           = 'OffsetInspect.psm1'
-    ModuleVersion        = '3.1.1'
+    ModuleVersion        = '3.1.2'
     GUID                 = '2d9f6f83-2c4f-4a6e-8a53-1cf9a5fbc2f6'
     Author               = 'Jared Perry (Velkris)'
     CompanyName          = 'DreadHost Research'
@@ -90,6 +90,9 @@
             LicenseUri = 'https://github.com/warpedatom/OffsetInspect/blob/main/LICENSE'
             ProjectUri = 'https://github.com/warpedatom/OffsetInspect'
             ReleaseNotes = @'
+OffsetInspect 3.1.2
+- Fixes Get-OffsetPEInfo / Get-OffsetIOC returning a null imphash and zero imports for every 32-bit (PE32) binary. The ordinal-import flag was built as [uint64]0x80000000, which PowerShell parses as a negative Int32 and cannot cast, so import parsing threw and was silently swallowed into a warning. imphash and the import list are now populated for PE32 files (PE32+/x64 were unaffected). imphash is a primary malware-clustering IOC and a large share of malware is 32-bit, so this restores correct triage output for those samples.
+
 OffsetInspect 3.1.1
 - Fixes Get-OffsetString splitting a string that straddles a read-window seam into two truncated halves. A trailing run is now carried into the next window, so results no longer depend on -WindowSize. This also makes Get-OffsetIOC's PrintableStringCount deterministic for files larger than the 1 MiB default window.
 
