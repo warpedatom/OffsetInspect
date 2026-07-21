@@ -305,7 +305,12 @@ function Get-OIPEImport {
                 if ($thunkValue -eq 0) { break }
 
                 if (($thunkValue -band $ordinalFlag) -ne 0) {
-                    $functionName = 'ord' + [int]($thunkValue -band 0xFFFF)
+                    # Resolve ordinals imported from ws2_32/wsock32/oleaut32 to the real
+                    # function name (as pefile/VirusTotal do) so the imphash correlates with
+                    # threat intel; any other ordinal falls back to "ord<n>".
+                    $ordinal = [int]($thunkValue -band 0xFFFF)
+                    $resolved = Get-OISpecialOrdinalName -Library $libraryName -Ordinal $ordinal
+                    $functionName = if ($null -ne $resolved) { $resolved } else { 'ord' + $ordinal }
                 }
                 else {
                     $byNameOffset = ConvertFrom-OIRvaToOffset -Image $Image -Rva ([int64]($thunkValue -band 0xFFFFFFFF))

@@ -36,9 +36,9 @@ AfterAll {
     Remove-Module OffsetInspect -Force -ErrorAction SilentlyContinue
 }
 Describe 'OffsetInspect module package' {
-    It 'has a valid 3.1.2 manifest' {
+    It 'has a valid 3.1.3 manifest' {
         $manifest = Test-ModuleManifest -Path $ManifestPath -ErrorAction Stop
-        $manifest.Version.ToString() | Should -Be '3.1.2'
+        $manifest.Version.ToString() | Should -Be '3.1.3'
         $manifest.RootModule | Should -Be 'OffsetInspect.psm1'
     }
 
@@ -1565,6 +1565,17 @@ Describe 'PE imports, overlay, and imphash' {
         # Tie the imphash to the reference helper so the walk is proven to yield 'test.myfunc'.
         $expected = InModuleScope OffsetInspect { Get-OIImpHash -Entry @('test.myfunc') }
         $info.ImpHash | Should -Be $expected
+    }
+
+    It 'resolves special-library import ordinals to match pefile' {
+        # ws2_32/wsock32/oleaut32 ordinals resolve to real names (lowercased) so the
+        # imphash correlates with pefile/VirusTotal; everything else falls back to ordN.
+        $probe = { param($Lib, $Ord) Get-OISpecialOrdinalName -Library $Lib -Ordinal $Ord }
+        (InModuleScope OffsetInspect -Parameters @{ Lib = 'WS2_32.dll'; Ord = 1 } $probe) | Should -Be 'accept'
+        (InModuleScope OffsetInspect -Parameters @{ Lib = 'ws2_32.dll'; Ord = 115 } $probe) | Should -Be 'wsastartup'
+        (InModuleScope OffsetInspect -Parameters @{ Lib = 'oleaut32.dll'; Ord = 2 } $probe) | Should -Be 'sysallocstring'
+        (InModuleScope OffsetInspect -Parameters @{ Lib = 'kernel32.dll'; Ord = 5 } $probe) | Should -BeNullOrEmpty
+        (InModuleScope OffsetInspect -Parameters @{ Lib = 'ws2_32.dll'; Ord = 60000 } $probe) | Should -BeNullOrEmpty
     }
 
     It 'maps an RVA to a file offset via the section table' {
