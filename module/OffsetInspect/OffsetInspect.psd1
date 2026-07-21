@@ -1,6 +1,6 @@
 @{
     RootModule           = 'OffsetInspect.psm1'
-    ModuleVersion        = '3.1.2'
+    ModuleVersion        = '3.1.3'
     GUID                 = '2d9f6f83-2c4f-4a6e-8a53-1cf9a5fbc2f6'
     Author               = 'Jared Perry (Velkris)'
     CompanyName          = 'DreadHost Research'
@@ -20,6 +20,7 @@
         'Private/Core.IO.ps1',
         'Private/Core.Inspection.ps1',
         'Private/Core.Output.ps1',
+        'Private/Core.PE.Ordinals.ps1',
         'Private/Core.PE.ps1',
         'Private/Core.String.ps1',
         'Private/Threat.Amsi.ps1',
@@ -90,6 +91,9 @@
             LicenseUri = 'https://github.com/warpedatom/OffsetInspect/blob/main/LICENSE'
             ProjectUri = 'https://github.com/warpedatom/OffsetInspect'
             ReleaseNotes = @'
+OffsetInspect 3.1.3
+- imphash now resolves ordinal imports from ws2_32/wsock32/oleaut32 to their real function names, matching pefile and VirusTotal. Previously these rendered as ord<N>, so any binary importing those libraries by ordinal (a common malware networking pattern) produced an imphash that would not match VirusTotal, defeating imphash's purpose of correlating a sample against threat intel. Other ordinal imports still render ord<N>, as pefile does. New private tables Core.PE.Ordinals.ps1 (696 entries, generated from pefile), kept in lockstep with the OffsetScan engine.
+
 OffsetInspect 3.1.2
 - Fixes Get-OffsetPEInfo / Get-OffsetIOC returning a null imphash and zero imports for every 32-bit (PE32) binary. The ordinal-import flag was built as [uint64]0x80000000, which PowerShell parses as a negative Int32 and cannot cast, so import parsing threw and was silently swallowed into a warning. imphash and the import list are now populated for PE32 files (PE32+/x64 were unaffected). imphash is a primary malware-clustering IOC and a large share of malware is 32-bit, so this restores correct triage output for those samples.
 

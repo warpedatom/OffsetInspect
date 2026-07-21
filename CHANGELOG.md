@@ -9,6 +9,29 @@ All notable changes to OffsetInspect are documented in this file. The project fo
 - Additional provider adapters after the v2 provider contract has received field testing.
 - Published benchmark baselines for representative text and binary corpora.
 
+## [3.1.3] - 2026-07-20
+
+Bug-fix release. No command, parameter, or output-schema changes.
+
+### Fixed
+
+- **imphash now resolves ordinal imports from `ws2_32`/`wsock32`/`oleaut32` to their real
+  function names, matching pefile and VirusTotal.** `Get-OffsetPEInfo`/`Get-OffsetIOC`
+  previously rendered every ordinal import as `ord<N>`, so a binary importing those
+  libraries by ordinal — a common malware networking pattern — produced an imphash that
+  did not match the value analysts look up on VirusTotal (which uses pefile). The imphash
+  was correct but non-correlatable for those samples, the opposite of its purpose. Ordinals
+  from those three libraries are now resolved via pefile's tables; all other ordinal imports
+  still render `ord<N>`, exactly as pefile does. Verified: `Get-OffsetIOC` matches pefile on
+  the previously-divergent special-ordinal binaries, and stays byte-identical to the native
+  OffsetScan engine.
+
+### Added
+
+- `Private/Core.PE.Ordinals.ps1`: pefile's `ws2_32`/`wsock32`/`oleaut32` ordinal->name
+  tables (696 entries, generated verbatim from pefile 2024.8.26), plus a `Get-OISpecialOrdinalName`
+  regression test. Kept in lockstep with OffsetScan's `src/ordinals.rs`.
+
 ## [3.1.2] - 2026-07-20
 
 Bug-fix release. No command, parameter, or output-schema changes.
