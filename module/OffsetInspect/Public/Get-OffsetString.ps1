@@ -6,8 +6,10 @@ function Get-OffsetString {
     .DESCRIPTION
         Scans the file in bounded-memory windows and emits each printable string (default
         minimum length 4) tagged with its absolute byte offset and encoding. The offsets feed
-        directly into Invoke-OffsetInspect for context. A string that straddles a window
-        boundary may be split; raise -WindowSize to reduce that. Cross-platform.
+        directly into Invoke-OffsetInspect for context. A run that reaches the end of a window
+        is carried over and scanned with the next one, so a string straddling a window seam is
+        reported once, whole, and results do not depend on -WindowSize. The single exception is
+        a string longer than an entire window, which is still split at the seam. Cross-platform.
 
     .PARAMETER FilePath
         The file to scan.
@@ -59,7 +61,21 @@ function Get-OffsetString {
             $bytes = Read-OIFileRange -Stream $stream -Start $start -Length $WindowSize
             if ($bytes.Length -le 0) { break }
 
-            foreach ($found in (Get-OIByteString -Bytes $bytes -BaseOffset $start -MinimumLength $MinimumLength -Encoding $Encoding)) {
+            # Hold back any trailing run so a string straddling the seam is scanned once,
+            # whole, as part of the next window. The final window keeps its tail.
+            $carry = 0
+            if (($start + $bytes.Length) -lt $fileSize) {
+                $carry = Get-OITrailingRunLength -Bytes $bytes -Encoding $Encoding
+            }
+
+            $scanLength = $bytes.Length - $carry
+            $scanBytes = $bytes
+            if ($carry -gt 0) {
+                $scanBytes = New-Object byte[] $scanLength
+                [Array]::Copy($bytes, 0, $scanBytes, 0, $scanLength)
+            }
+
+            foreach ($found in (Get-OIByteString -Bytes $scanBytes -BaseOffset $start -MinimumLength $MinimumLength -Encoding $Encoding)) {
                 [pscustomobject]@{
                     Offset    = $found.Offset
                     OffsetHex = '0x{0:X}' -f $found.Offset
@@ -69,7 +85,7 @@ function Get-OffsetString {
                 }
             }
 
-            $start += $bytes.Length
+            $start += $scanLength
         }
     }
     finally {

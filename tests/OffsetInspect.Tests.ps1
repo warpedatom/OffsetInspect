@@ -36,15 +36,15 @@ AfterAll {
     Remove-Module OffsetInspect -Force -ErrorAction SilentlyContinue
 }
 Describe 'OffsetInspect module package' {
-    It 'has a valid 3.0.0 manifest' {
+    It 'has a valid 3.2.0 manifest' {
         $manifest = Test-ModuleManifest -Path $ManifestPath -ErrorAction Stop
-        $manifest.Version.ToString() | Should -Be '3.0.0'
+        $manifest.Version.ToString() | Should -Be '3.2.0'
         $manifest.RootModule | Should -Be 'OffsetInspect.psm1'
     }
 
     It 'exports only the supported public commands' {
         $commands = @(Get-Command -Module OffsetInspect | Select-Object -ExpandProperty Name | Sort-Object)
-        ($commands -join ',') | Should -Be 'Compare-OffsetThreatResult,Export-OffsetThreatReport,Get-OffsetEntropy,Get-OffsetIOC,Get-OffsetPEInfo,Get-OffsetString,Invoke-OffsetClamScan,Invoke-OffsetInspect,Invoke-OffsetThreatScan,Invoke-OffsetThreatScanBatch,Invoke-OffsetThreatScanRegion,Invoke-OffsetYaraScan'
+        ($commands -join ',') | Should -Be 'Add-OffsetDriftEntry,Compare-OffsetThreatResult,Export-OffsetThreatReport,Get-OffsetDetectionTrigger,Get-OffsetDrift,Get-OffsetEntropy,Get-OffsetIOC,Get-OffsetPEInfo,Get-OffsetString,Invoke-OffsetClamScan,Invoke-OffsetInspect,Invoke-OffsetMutationTest,Invoke-OffsetThreatScan,Invoke-OffsetThreatScanBatch,Invoke-OffsetThreatScanRegion,Invoke-OffsetYaraScan'
     }
 
     It 'imports from an isolated Gallery-style folder' {
@@ -1368,6 +1368,78 @@ Describe 'String extraction' {
         $hits.Count | Should -Be 1
         $hits[0].Offset | Should -Be 4
     }
+
+    It 'reports an ASCII string straddling a window seam once, whole' {
+        # 'STRADDLINGVALUE' begins 5 bytes before the 4096-byte window boundary, so a
+        # naive windowed read would emit 'STRAD' and 'DLINGVALUE' as two truncated hits.
+        $window = 4096
+        $marker = 'STRADDLINGVALUE'
+        $bytes = New-Object byte[] ($window * 2)
+        $markerStart = $window - 5
+        [System.Text.Encoding]::ASCII.GetBytes($marker).CopyTo($bytes, $markerStart)
+        $path = Join-Path $TestDrive 'straddle-ascii.bin'
+        [System.IO.File]::WriteAllBytes($path, $bytes)
+
+        $hits = @(Get-OffsetString -FilePath $path -Encoding Ascii -MinimumLength 4 -WindowSize $window)
+        $hits.Count | Should -Be 1
+        $hits[0].Value | Should -Be $marker
+        $hits[0].Offset | Should -Be $markerStart
+    }
+
+    It 'reports a UTF-16LE string straddling a window seam once, whole' {
+        $window = 4096
+        $marker = 'WideStraddle'
+        $bytes = New-Object byte[] ($window * 2)
+        $markerStart = $window - 6
+        [System.Text.Encoding]::Unicode.GetBytes($marker).CopyTo($bytes, $markerStart)
+        $path = Join-Path $TestDrive 'straddle-unicode.bin'
+        [System.IO.File]::WriteAllBytes($path, $bytes)
+
+        $hits = @(Get-OffsetString -FilePath $path -Encoding Unicode -MinimumLength 4 -WindowSize $window)
+        $hits.Count | Should -Be 1
+        $hits[0].Value | Should -Be $marker
+        $hits[0].Offset | Should -Be $markerStart
+    }
+
+    It 'returns identical results regardless of window size' {
+        # Strings scattered across many seams; the result set must not depend on -WindowSize.
+        $bytes = New-Object byte[] 40000
+        for ($i = 0; $i -lt 39000; $i += 997) {
+            [System.Text.Encoding]::ASCII.GetBytes("Marker$i").CopyTo($bytes, $i)
+        }
+        $path = Join-Path $TestDrive 'window-independence.bin'
+        [System.IO.File]::WriteAllBytes($path, $bytes)
+
+        $baseline = @(Get-OffsetString -FilePath $path -MinimumLength 4 -WindowSize 65536 |
+                ForEach-Object { "$($_.Offset):$($_.Encoding):$($_.Value)" }) -join '|'
+        $baseline | Should -Not -BeNullOrEmpty
+
+        foreach ($size in 4096, 8192, 16384) {
+            $actual = @(Get-OffsetString -FilePath $path -MinimumLength 4 -WindowSize $size |
+                    ForEach-Object { "$($_.Offset):$($_.Encoding):$($_.Value)" }) -join '|'
+            $actual | Should -Be $baseline -Because "window size $size must not change the result set"
+        }
+    }
+
+    It 'measures the trailing run that may continue into the next window' {
+        $probe = {
+            param($B, $Enc)
+            Get-OITrailingRunLength -Bytes $B -Encoding $Enc
+        }
+
+        # Trailing printable ASCII run of 3.
+        $ascii = [byte[]](@(0x00, 0x00) + [System.Text.Encoding]::ASCII.GetBytes('abc'))
+        (InModuleScope OffsetInspect -Parameters @{ B = $ascii; Enc = 'Ascii' } $probe) | Should -Be 3
+
+        # NUL padding cannot continue a run, so nothing is held back. This is what keeps
+        # the carry-over small on PE files, which are mostly zero padding.
+        $padded = [byte[]](@(0x41, 0x42) + (@(0x00) * 8))
+        (InModuleScope OffsetInspect -Parameters @{ B = $padded; Enc = 'Both' } $probe) | Should -Be 0
+
+        # A run filling the whole buffer would stall the reader, so it is not held back.
+        $allPrintable = [System.Text.Encoding]::ASCII.GetBytes('AAAAAAAA')
+        (InModuleScope OffsetInspect -Parameters @{ B = $allPrintable; Enc = 'Ascii' } $probe) | Should -Be 0
+    }
 }
 
 Describe 'PE parsing' {
@@ -1442,6 +1514,68 @@ Describe 'PE imports, overlay, and imphash' {
         $hash | Should -Be 'ac5547a4cef5a0a41523374a369ff4b1'
         $empty = InModuleScope OffsetInspect { Get-OIImpHash -Entry @() }
         $empty | Should -BeNullOrEmpty
+    }
+
+    It 'parses a 32-bit (PE32) import table and computes its imphash' {
+        # Regression: the ordinal-import flag was built as [uint64]0x80000000, but
+        # PowerShell parses 0x80000000 as the negative Int32 -2147483648, so the cast
+        # threw and import parsing aborted for EVERY 32-bit PE: null imphash, zero
+        # imports, the failure hidden in a swallowed warning. The whole prior PE test
+        # corpus was PE32+ (x64), so nothing exercised this path.
+        $bytes = New-Object byte[] 0x300
+        $bytes[0] = 0x4D; $bytes[1] = 0x5A                                   # MZ
+        [BitConverter]::GetBytes([int32]0x40).CopyTo($bytes, 0x3C)           # e_lfanew
+        $bytes[0x40] = 0x50; $bytes[0x41] = 0x45                             # PE\0\0
+        [BitConverter]::GetBytes([uint16]0x014C).CopyTo($bytes, 0x44)        # Machine = I386
+        [BitConverter]::GetBytes([uint16]1).CopyTo($bytes, 0x46)            # NumberOfSections
+        [BitConverter]::GetBytes([uint16]0xE0).CopyTo($bytes, 0x54)          # SizeOfOptionalHeader
+        [BitConverter]::GetBytes([uint16]0x10B).CopyTo($bytes, 0x58)         # Magic = PE32
+        [BitConverter]::GetBytes([uint32]0x1000).CopyTo($bytes, 0x68)        # AddressOfEntryPoint
+        [BitConverter]::GetBytes([uint32]0x400000).CopyTo($bytes, 0x74)      # ImageBase (PE32 = uint32)
+        [BitConverter]::GetBytes([uint32]16).CopyTo($bytes, 0xB4)            # NumberOfRvaAndSizes
+        [BitConverter]::GetBytes([uint32]0x200).CopyTo($bytes, 0xC0)         # Import dir RVA (data dir index 1)
+        [BitConverter]::GetBytes([uint32]40).CopyTo($bytes, 0xC4)            # Import dir Size
+        # Section table at optionalOffset(0x58) + SizeOfOptionalHeader(0xE0) = 0x138.
+        # VirtualAddress == PointerToRawData so RVA maps 1:1 to file offset in this range.
+        $sec = 0x138
+        [System.Text.Encoding]::ASCII.GetBytes('.idata').CopyTo($bytes, $sec)
+        [BitConverter]::GetBytes([uint32]0x100).CopyTo($bytes, $sec + 8)     # VirtualSize
+        [BitConverter]::GetBytes([uint32]0x200).CopyTo($bytes, $sec + 12)    # VirtualAddress
+        [BitConverter]::GetBytes([uint32]0x100).CopyTo($bytes, $sec + 16)    # SizeOfRawData
+        [BitConverter]::GetBytes([uint32]0x200).CopyTo($bytes, $sec + 20)    # PointerToRawData
+        # IMAGE_IMPORT_DESCRIPTOR at RVA/offset 0x200; a zeroed one at 0x214..0x228
+        # terminates the list, so every other structure must sit at 0x228 or later or
+        # its bytes would be misread as that terminator's fields (a second phantom import).
+        [BitConverter]::GetBytes([uint32]0x228).CopyTo($bytes, 0x200)        # OriginalFirstThunk (ILT RVA)
+        [BitConverter]::GetBytes([uint32]0x240).CopyTo($bytes, 0x200 + 12)   # Name RVA
+        [BitConverter]::GetBytes([uint32]0x230).CopyTo($bytes, 0x200 + 16)   # FirstThunk (IAT; unused, ILT present)
+        [BitConverter]::GetBytes([uint32]0x250).CopyTo($bytes, 0x228)        # ILT[0] -> IMAGE_IMPORT_BY_NAME (ILT[1]=0 at 0x22C)
+        [System.Text.Encoding]::ASCII.GetBytes("TEST.dll`0").CopyTo($bytes, 0x240)
+        [System.Text.Encoding]::ASCII.GetBytes("MyFunc`0").CopyTo($bytes, 0x252)  # hint(2 bytes) then name
+
+        $path = Join-Path $TestDrive 'sample-pe32-imports.bin'
+        [System.IO.File]::WriteAllBytes($path, $bytes)
+
+        $info = Get-OffsetPEInfo -FilePath $path
+        $info.Machine | Should -Be 'x86 (I386)'
+        $info.IsPE32Plus | Should -BeFalse
+        $info.Warnings | Should -BeNullOrEmpty
+        $info.ImportedDllCount | Should -Be 1
+        @($info.Imports)[0].Dll | Should -Be 'TEST.dll'
+        # Tie the imphash to the reference helper so the walk is proven to yield 'test.myfunc'.
+        $expected = InModuleScope OffsetInspect { Get-OIImpHash -Entry @('test.myfunc') }
+        $info.ImpHash | Should -Be $expected
+    }
+
+    It 'resolves special-library import ordinals to match pefile' {
+        # ws2_32/wsock32/oleaut32 ordinals resolve to real names (lowercased) so the
+        # imphash correlates with pefile/VirusTotal; everything else falls back to ordN.
+        $probe = { param($Lib, $Ord) Get-OISpecialOrdinalName -Library $Lib -Ordinal $Ord }
+        (InModuleScope OffsetInspect -Parameters @{ Lib = 'WS2_32.dll'; Ord = 1 } $probe) | Should -Be 'accept'
+        (InModuleScope OffsetInspect -Parameters @{ Lib = 'ws2_32.dll'; Ord = 115 } $probe) | Should -Be 'wsastartup'
+        (InModuleScope OffsetInspect -Parameters @{ Lib = 'oleaut32.dll'; Ord = 2 } $probe) | Should -Be 'sysallocstring'
+        (InModuleScope OffsetInspect -Parameters @{ Lib = 'kernel32.dll'; Ord = 5 } $probe) | Should -BeNullOrEmpty
+        (InModuleScope OffsetInspect -Parameters @{ Lib = 'ws2_32.dll'; Ord = 60000 } $probe) | Should -BeNullOrEmpty
     }
 
     It 'maps an RVA to a file offset via the section table' {
@@ -1565,6 +1699,284 @@ Describe 'IOC panel and report enrichment' {
         $text = Get-Content -LiteralPath $out -Raw
         $text | Should -Match '### Indicators'
         $text | Should -Match '900150983cd24fb0d6963f7d28e17f72'
+    }
+
+    It 'sources the indicators panel from an OffsetScan ioc JSON dump' {
+        $target = Join-Path $TestDrive 'sample.exe'
+        $iocJson = Join-Path $TestDrive 'ioc.json'
+        # Schema-identical to Get-OffsetIOC / offsetscan output. Sentinel hash values
+        # that a live scan could never produce, to prove the panel came from the JSON.
+        $panel = [pscustomobject]@{
+            File = $target; FileSize = 4096
+            MD5 = 'ffffffffffffffffffffffffffffffff'; SHA1 = ('1' * 40); SHA256 = ('2' * 64)
+            OverallEntropy = 6.5; HighEntropyWindows = 3; PrintableStringCount = 42
+            IsPE = $true; Machine = 'x64 (AMD64)'
+            ImpHash = 'abcdef0123456789abcdef0123456789'; ImportedDllCount = 7
+            HasOverlay = $false; OverlaySize = 0
+        }
+        # Force a genuine JSON array [ {...} ] to match offsetscan's real output shape
+        # (and exercise the WinPS 5.1 module-scope array-parsing path deterministically).
+        $panelJson = '[' + (ConvertTo-Json -InputObject $panel -Depth 6 -Compress) + ']'
+        Set-Content -LiteralPath $iocJson -Value $panelJson -Encoding UTF8
+        $result = [pscustomobject]@{ Success = $true; File = $target; InitialStatus = 'NotDetected'; ProbeLog = @(); Warnings = @() }
+        $out = Join-Path $TestDrive 'ingest-report.md'
+        $null = $result | Export-OffsetThreatReport -Path $out -IocJsonPath $iocJson
+        $text = Get-Content -LiteralPath $out -Raw
+        $text | Should -Match '### Indicators'
+        $text | Should -Match 'ffffffffffffffffffffffffffffffff'
+        $text | Should -Match 'abcdef0123456789abcdef0123456789'
+    }
+
+    It 'leaves a record unenriched when its file is absent from the JSON and -IncludeIoc is not set' {
+        $iocJson = Join-Path $TestDrive 'ioc-empty.json'
+        '[]' | Set-Content -LiteralPath $iocJson -Encoding UTF8
+        $result = [pscustomobject]@{ Success = $true; File = (Join-Path $TestDrive 'missing.exe'); InitialStatus = 'NotDetected'; ProbeLog = @(); Warnings = @() }
+        $out = Join-Path $TestDrive 'ingest-miss.md'
+        $null = $result | Export-OffsetThreatReport -Path $out -IocJsonPath $iocJson
+        (Get-Content -LiteralPath $out -Raw) | Should -Not -Match '### Indicators'
+    }
+}
+
+Describe 'Detection-trigger correlation' {
+    It 'core: identifies the string ending at the boundary and reads it as textual' {
+        $region = [System.Text.Encoding]::ASCII.GetBytes('AAAA MarkerAlpha')
+        $t = InModuleScope OffsetInspect -Parameters @{ Region = $region } {
+            param($Region)
+            Get-OIDetectionTrigger -RegionBytes $Region -RegionStart 0 -BoundaryOffset 15 -FileSize 16 -MinimumLength 4
+        }
+        $t.CandidateStrings[0].ContainsBoundary | Should -BeTrue
+        $t.CandidateStrings[0].Value | Should -Match 'MarkerAlpha'
+        $t.Interpretation | Should -Match 'textual'
+        $t.Interpretation | Should -Match 'MarkerAlpha'
+        $t.Section | Should -BeNullOrEmpty
+    }
+
+    It 'core: flags a high-entropy boundary region as binary/packed' {
+        $rng = [byte[]]::new(64)
+        (New-Object Random 7).NextBytes($rng)
+        $t = InModuleScope OffsetInspect -Parameters @{ Region = $rng } {
+            param($Region)
+            Get-OIDetectionTrigger -RegionBytes $Region -RegionStart 0 -BoundaryOffset 63 -FileSize 64 -MinimumLength 4
+        }
+        $t.PreBoundaryEntropy | Should -BeGreaterThan 5.0
+    }
+
+    It 'public: analyzes a file at an explicit boundary offset' {
+        $path = Join-Path $TestDrive 'trig.bin'
+        [System.IO.File]::WriteAllBytes($path, [System.Text.Encoding]::ASCII.GetBytes('prefix MarkerBravo more'))
+        $boundary = ('prefix MarkerBravo').Length - 1
+        $t = Get-OffsetDetectionTrigger -FilePath $path -BoundaryOffset $boundary
+        $t.BoundaryOffset | Should -Be $boundary
+        $t.CandidateStrings.Count | Should -BeGreaterThan 0
+        (@($t.CandidateStrings).Value -join ' ') | Should -Match 'MarkerBravo'
+    }
+
+    It 'public: enriches a threat result from the pipeline and skips results with no boundary' {
+        $path = Join-Path $TestDrive 'trig2.bin'
+        [System.IO.File]::WriteAllBytes($path, [System.Text.Encoding]::ASCII.GetBytes('prefix MarkerBravo more'))
+        $boundary = ('prefix MarkerBravo').Length - 1
+        $detected = [pscustomobject]@{ Success = $true; File = $path; DetectionBoundaryOffset = $boundary; SignatureName = 'Test/Sig' }
+        $t = $detected | Get-OffsetDetectionTrigger
+        $t.SignatureName | Should -Be 'Test/Sig'
+        $t.BoundaryHex | Should -Match '^0x'
+
+        $noBoundary = [pscustomobject]@{ Success = $true; File = $path; DetectionBoundaryOffset = $null }
+        @($noBoundary | Get-OffsetDetectionTrigger).Count | Should -Be 0
+    }
+
+    It 'report: -IncludeTrigger renders a Detection trigger section with the candidate string' {
+        $path = Join-Path $TestDrive 'trig3.bin'
+        [System.IO.File]::WriteAllBytes($path, [System.Text.Encoding]::ASCII.GetBytes('prefix MarkerBravo more'))
+        $boundary = ('prefix MarkerBravo').Length - 1
+        $result = [pscustomobject]@{
+            Success = $true; File = $path; InitialStatus = 'Detected'; DetectionBoundaryOffset = $boundary
+            SignatureName = 'Test/Sig'; ProbeLog = @(); Warnings = @()
+        }
+        $out = Join-Path $TestDrive 'trig-report.md'
+        $null = $result | Export-OffsetThreatReport -Path $out -IncludeTrigger
+        $md = Get-Content -LiteralPath $out -Raw
+        $md | Should -Match '### Detection trigger'
+        $md | Should -Match 'MarkerBravo'
+    }
+}
+
+Describe 'Detection-drift journal' {
+    It 'core: reads a status change with no file change but a signature update as signature drift' {
+        $snaps = @(
+            [pscustomobject]@{ TimestampUtc = '2026-01-01T00:00:00Z'; File = 'C:\s.ps1'; FileSha256 = 'aaa'; Status = 'Detected'; SignatureName = 'Sig/X'; DetectionBoundaryOffset = 100; SignatureVersion = '1.400.1.0' },
+            [pscustomobject]@{ TimestampUtc = '2026-02-01T00:00:00Z'; File = 'C:\s.ps1'; FileSha256 = 'aaa'; Status = 'NotDetected'; SignatureName = $null; DetectionBoundaryOffset = $null; SignatureVersion = '1.410.9.0' }
+        )
+        $d = InModuleScope OffsetInspect -Parameters @{ S = $snaps } { param($S) Compare-OIDriftTimeline -Snapshots $S }
+        $d.SnapshotCount | Should -Be 2
+        $d.EverChanged | Should -BeTrue
+        $d.Transitions[0].StatusChanged | Should -BeTrue
+        $d.Transitions[0].HashChanged | Should -BeFalse
+        $d.Transitions[0].Explanation | Should -Match 'signature drift'
+    }
+
+    It 'core: reads a status change alongside a hash change as a file modification' {
+        $snaps = @(
+            [pscustomobject]@{ TimestampUtc = '2026-01-01T00:00:00Z'; File = 'C:\s.ps1'; FileSha256 = 'aaa'; Status = 'Detected'; SignatureName = 'Sig/X'; DetectionBoundaryOffset = 100; SignatureVersion = '1.400.1.0' },
+            [pscustomobject]@{ TimestampUtc = '2026-02-01T00:00:00Z'; File = 'C:\s.ps1'; FileSha256 = 'bbb'; Status = 'NotDetected'; SignatureName = $null; DetectionBoundaryOffset = $null; SignatureVersion = '1.400.1.0' }
+        )
+        $d = InModuleScope OffsetInspect -Parameters @{ S = $snaps } { param($S) Compare-OIDriftTimeline -Snapshots $S }
+        $d.DistinctHashes | Should -Be 2
+        $d.Transitions[0].HashChanged | Should -BeTrue
+        $d.Transitions[0].Explanation | Should -Match 'File content changed'
+    }
+
+    It 'core: reads a status change with no file or signature change as non-deterministic' {
+        $snaps = @(
+            [pscustomobject]@{ TimestampUtc = '2026-01-01T00:00:00Z'; File = 'C:\s.ps1'; FileSha256 = 'aaa'; Status = 'Detected'; SignatureName = 'Sig/X'; DetectionBoundaryOffset = 100; SignatureVersion = '1.400.1.0' },
+            [pscustomobject]@{ TimestampUtc = '2026-02-01T00:00:00Z'; File = 'C:\s.ps1'; FileSha256 = 'aaa'; Status = 'NotDetected'; SignatureName = $null; DetectionBoundaryOffset = $null; SignatureVersion = '1.400.1.0' }
+        )
+        $d = InModuleScope OffsetInspect -Parameters @{ S = $snaps } { param($S) Compare-OIDriftTimeline -Snapshots $S }
+        $d.Transitions[0].Explanation | Should -Match 'non-deterministic'
+    }
+
+    It 'core: reads a pure signature-name change as provider reclassification' {
+        $snaps = @(
+            [pscustomobject]@{ TimestampUtc = '2026-01-01T00:00:00Z'; File = 'C:\s.ps1'; FileSha256 = 'aaa'; Status = 'Detected'; SignatureName = 'Trojan:X/A'; DetectionBoundaryOffset = 100; SignatureVersion = '1.400.1.0' },
+            [pscustomobject]@{ TimestampUtc = '2026-02-01T00:00:00Z'; File = 'C:\s.ps1'; FileSha256 = 'aaa'; Status = 'Detected'; SignatureName = 'Trojan:X/B'; DetectionBoundaryOffset = 100; SignatureVersion = '1.400.1.0' }
+        )
+        $d = InModuleScope OffsetInspect -Parameters @{ S = $snaps } { param($S) Compare-OIDriftTimeline -Snapshots $S }
+        $d.Transitions[0].SignatureChanged | Should -BeTrue
+        $d.Transitions[0].Explanation | Should -Match 'reclassification'
+    }
+
+    It 'public: records snapshots and reports a file-modification transition end to end' {
+        $journal = Join-Path $TestDrive 'drift.ndjson'
+        $file = Join-Path $TestDrive 'evolving.bin'
+        [System.IO.File]::WriteAllBytes($file, [System.Text.Encoding]::ASCII.GetBytes('version-one'))
+        $null = Add-OffsetDriftEntry -FilePath $file -Status Detected -Engine AMSI -SignatureName 'Sig/A' -JournalPath $journal
+        [System.IO.File]::WriteAllBytes($file, [System.Text.Encoding]::ASCII.GetBytes('version-two-different-length'))
+        $null = Add-OffsetDriftEntry -FilePath $file -Status NotDetected -Engine AMSI -JournalPath $journal
+
+        $drift = Get-OffsetDrift -JournalPath $journal -FilePath $file
+        $drift.SnapshotCount | Should -Be 2
+        $drift.DistinctHashes | Should -Be 2
+        $drift.CurrentStatus | Should -Be 'NotDetected'
+        $drift.Transitions[0].HashChanged | Should -BeTrue
+        $drift.Transitions[0].Explanation | Should -Match 'File content changed'
+    }
+
+    It 'public: records a snapshot from a threat-result object' {
+        $journal = Join-Path $TestDrive 'drift-result.ndjson'
+        $file = Join-Path $TestDrive 'res.bin'
+        [System.IO.File]::WriteAllBytes($file, [System.Text.Encoding]::ASCII.GetBytes('abc'))
+        $result = [pscustomobject]@{ File = $file; InitialStatus = 'Detected'; Engine = 'AMSI'; DetectionBoundaryOffset = 2; SignatureName = 'Sig/Z'; FileSize = 3 }
+        $entry = $result | Add-OffsetDriftEntry -JournalPath $journal
+        $entry.Status | Should -Be 'Detected'
+        $entry.Detected | Should -BeTrue
+        $entry.SignatureName | Should -Be 'Sig/Z'
+        $entry.FileSha256 | Should -Be 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+        @(Get-Content -LiteralPath $journal).Count | Should -Be 1
+    }
+}
+
+Describe 'Signature-robustness mutation testing' {
+    It 'core: inverts case across the whole content' {
+        $v = InModuleScope OffsetInspect { Get-OIMutationVariant -Content 'AbC-123' -Transform 'CaseInversion' }
+        $v | Should -Be 'aBc-123'
+    }
+
+    It 'core: locates the longest distinctive token' {
+        $span = InModuleScope OffsetInspect { Get-OILongestTokenSpan -Content 'ok SUPERBADTOKEN ok' }
+        $span.Value | Should -Be 'SUPERBADTOKEN'
+    }
+
+    It 'core: token transforms break the distinctive token' {
+        foreach ($t in 'StringConcatenation', 'CommentInsertion', 'WhitespaceInjection') {
+            $v = InModuleScope OffsetInspect -Parameters @{ T = $t } {
+                param($T)
+                $c = 'ok SUPERBADTOKEN ok'
+                Get-OIMutationVariant -Content $c -Transform $T -TokenSpan (Get-OILongestTokenSpan -Content $c)
+            }
+            $v | Should -Not -Be 'ok SUPERBADTOKEN ok'
+            $v | Should -Not -Match 'SUPERBADTOKEN'
+        }
+    }
+
+    It 'core: reports which transforms neutralized a detected token (injected scanner)' {
+        $fake = { param($t) if ($t -cmatch 'SUPERBADTOKEN') { 'Detected' } else { 'NotDetected' } }
+        $set = InModuleScope OffsetInspect -Parameters @{ C = 'ok SUPERBADTOKEN ok'; T = @('CaseInversion', 'StringConcatenation', 'CommentInsertion', 'WhitespaceInjection'); S = $fake } {
+            param($C, $T, $S)
+            Test-OIMutationSet -Content $C -Transforms $T -Scanner $S
+        }
+        $set.BaselineDetected | Should -BeTrue
+        $set.TargetToken | Should -Be 'SUPERBADTOKEN'
+        $set.EvasionCount | Should -Be 4
+    }
+
+    It 'core: reports nothing to test when the baseline is not detected' {
+        $fake = { param($t) if ($t -cmatch 'SUPERBADTOKEN') { 'Detected' } else { 'NotDetected' } }
+        $set = InModuleScope OffsetInspect -Parameters @{ C = 'totally benign text with a longword'; T = @('CaseInversion'); S = $fake } {
+            param($C, $T, $S)
+            Test-OIMutationSet -Content $C -Transforms $T -Scanner $S
+        }
+        $set.BaselineDetected | Should -BeFalse
+        $set.EvasionCount | Should -Be 0
+    }
+
+    It 'public: refuses to run without the authorization acknowledgement' {
+        $f = Join-Path $TestDrive 'sample.txt'
+        Set-Content -LiteralPath $f -Value 'hello world'
+        { Invoke-OffsetMutationTest -FilePath $f -AuthorizedEngagement:$false } | Should -Throw -ExpectedMessage '*authorized*'
+    }
+}
+
+Describe 'Telemetry correlation' {
+    BeforeAll {
+        # A minimal Microsoft Defender 1116 event, with the real EventData/Data shape and a
+        # deliberately empty element to exercise the StrictMode-safe parse.
+        $script:DefenderEventXml = @'
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+  <System><EventID>1116</EventID></System>
+  <EventData>
+    <Data Name="Threat Name">Trojan:Win32/TestSample</Data>
+    <Data Name="Severity Name">Severe</Data>
+    <Data Name="Category Name">Trojan</Data>
+    <Data Name="Source Name">AMSI</Data>
+    <Data Name="Process Name">C:\Program Files\PowerShell\7\pwsh.exe</Data>
+    <Data Name="Detection User">CORP\analyst</Data>
+    <Data Name="Path">amsi:_\Device\HarddiskVolume3\sample.ps1</Data>
+    <Data Name="Action Name">Not Applicable</Data>
+    <Data Name="Extra Sensor" />
+  </EventData>
+</Event>
+'@
+    }
+
+    It 'parses named EventData fields and tolerates empty Data elements under StrictMode' {
+        $fields = InModuleScope OffsetInspect -Parameters @{ X = $script:DefenderEventXml } {
+            param($X) ConvertFrom-OIWinEventDataField -Xml $X
+        }
+        $fields['Threat Name'] | Should -Be 'Trojan:Win32/TestSample'
+        $fields['Source Name'] | Should -Be 'AMSI'
+        $fields['Extra Sensor'] | Should -Be ''  # empty element must be present, not throw
+    }
+
+    It 'shapes a Defender detection record with the schema fields' {
+        $rec = InModuleScope OffsetInspect -Parameters @{ X = $script:DefenderEventXml } {
+            param($X) ConvertFrom-OIDefenderDetectionEvent -Xml $X -EventId 1116 -RecordId 4242
+        }
+        $rec.ThreatName | Should -Be 'Trojan:Win32/TestSample'
+        $rec.SeverityName | Should -Be 'Severe'
+        $rec.SourceName | Should -Be 'AMSI'
+        $rec.ProcessName | Should -Be 'C:\Program Files\PowerShell\7\pwsh.exe'
+        $rec.EventId | Should -Be 1116
+        $rec.RecordId | Should -Be 4242
+    }
+
+    It 'scores confidence High only on source AND process match' {
+        $probe = {
+            param($Src, $HostPath)
+            $evt = [pscustomobject]@{ SourceName = 'AMSI'; ProcessName = 'C:\pwsh.exe' }
+            Get-OITelemetryEventConfidence -Event $evt -ExpectedSource $Src -HostProcessPath $HostPath
+        }
+        (InModuleScope OffsetInspect -Parameters @{ Src = 'AMSI'; HostPath = 'C:\pwsh.exe' } $probe) | Should -Be 'High'
+        (InModuleScope OffsetInspect -Parameters @{ Src = 'AMSI'; HostPath = 'C:\other.exe' } $probe) | Should -Be 'Medium'
+        (InModuleScope OffsetInspect -Parameters @{ Src = 'Real-Time Protection'; HostPath = 'C:\other.exe' } $probe) | Should -Be 'Low'
     }
 }
 

@@ -23,7 +23,7 @@ try {
     Import-Module (Join-Path $tempModule 'OffsetInspect.psd1') -Force -ErrorAction Stop
 
     $exports = @(Get-Command -Module OffsetInspect | Select-Object -ExpandProperty Name | Sort-Object)
-    $expected = @('Compare-OffsetThreatResult', 'Export-OffsetThreatReport', 'Get-OffsetEntropy', 'Get-OffsetIOC', 'Get-OffsetPEInfo', 'Get-OffsetString', 'Invoke-OffsetClamScan', 'Invoke-OffsetInspect', 'Invoke-OffsetThreatScan', 'Invoke-OffsetThreatScanBatch', 'Invoke-OffsetThreatScanRegion', 'Invoke-OffsetYaraScan')
+    $expected = @('Add-OffsetDriftEntry', 'Compare-OffsetThreatResult', 'Export-OffsetThreatReport', 'Get-OffsetDetectionTrigger', 'Get-OffsetDrift', 'Get-OffsetEntropy', 'Get-OffsetIOC', 'Get-OffsetPEInfo', 'Get-OffsetString', 'Invoke-OffsetClamScan', 'Invoke-OffsetInspect', 'Invoke-OffsetMutationTest', 'Invoke-OffsetThreatScan', 'Invoke-OffsetThreatScanBatch', 'Invoke-OffsetThreatScanRegion', 'Invoke-OffsetYaraScan')
     if (($exports -join ',') -ne ($expected -join ',')) {
         throw "Unexpected exports: $($exports -join ', ')"
     }

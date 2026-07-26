@@ -262,9 +262,12 @@ function Get-OIPEImport {
     }
 
     $pointerSize = if ($Image.IsPE32Plus) { 8 } else { 4 }
-    # Build the ordinal-import flag via a hex string to avoid the 0x8000000000000000
-    # literal overflowing Int64 during parsing.
-    $ordinalFlag = if ($Image.IsPE32Plus) { [System.Convert]::ToUInt64('8000000000000000', 16) } else { [uint64]0x80000000 }
+    # Build the ordinal-import flag via a hex string. Both widths must go through
+    # Convert.ToUInt64: PowerShell parses 0x8000000000000000 as an overflowing Int64,
+    # and (the PE32 case this fixes) parses 0x80000000 as the *negative* Int32
+    # -2147483648, so a bare [uint64]0x80000000 throws "Value was too large or too
+    # small for a UInt64" and aborts import parsing for every 32-bit PE.
+    $ordinalFlag = if ($Image.IsPE32Plus) { [System.Convert]::ToUInt64('8000000000000000', 16) } else { [System.Convert]::ToUInt64('80000000', 16) }
 
     $descriptorIndex = 0
     while ($descriptorIndex -lt 4096) {
@@ -302,7 +305,12 @@ function Get-OIPEImport {
                 if ($thunkValue -eq 0) { break }
 
                 if (($thunkValue -band $ordinalFlag) -ne 0) {
-                    $functionName = 'ord' + [int]($thunkValue -band 0xFFFF)
+                    # Resolve ordinals imported from ws2_32/wsock32/oleaut32 to the real
+                    # function name (as pefile/VirusTotal do) so the imphash correlates with
+                    # threat intel; any other ordinal falls back to "ord<n>".
+                    $ordinal = [int]($thunkValue -band 0xFFFF)
+                    $resolved = Get-OISpecialOrdinalName -Library $libraryName -Ordinal $ordinal
+                    $functionName = if ($null -ne $resolved) { $resolved } else { 'ord' + $ordinal }
                 }
                 else {
                     $byNameOffset = ConvertFrom-OIRvaToOffset -Image $Image -Rva ([int64]($thunkValue -band 0xFFFFFFFF))

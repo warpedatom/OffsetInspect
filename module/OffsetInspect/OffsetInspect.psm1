@@ -9,6 +9,7 @@ foreach ($scriptFile in @($privateScripts) + @($publicScripts)) {
 
 Export-ModuleMember -Function @(
     'Invoke-OffsetInspect',
+    'Invoke-OffsetMutationTest',
     'Invoke-OffsetThreatScan',
     'Invoke-OffsetThreatScanBatch',
     'Invoke-OffsetThreatScanRegion',
@@ -16,6 +17,9 @@ Export-ModuleMember -Function @(
     'Invoke-OffsetClamScan',
     'Export-OffsetThreatReport',
     'Compare-OffsetThreatResult',
+    'Add-OffsetDriftEntry',
+    'Get-OffsetDetectionTrigger',
+    'Get-OffsetDrift',
     'Get-OffsetEntropy',
     'Get-OffsetIOC',
     'Get-OffsetString',

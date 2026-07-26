@@ -9,6 +9,161 @@ All notable changes to OffsetInspect are documented in this file. The project fo
 - Additional provider adapters after the v2 provider contract has received field testing.
 - Published benchmark baselines for representative text and binary corpora.
 
+## [3.2.0] - 2026-07-21
+
+Feature release. Additive; existing commands, parameters, and output-schema field meanings
+are unchanged.
+
+### Added
+
+- **Telemetry correlation.** `Invoke-OffsetThreatScan -CaptureTelemetry` correlates a scan with
+  the Windows telemetry it generates and reports whether the action was *seen* by the defender:
+  was an alert raised, with what context, and which telemetry sources were blind. It captures
+  each accessible log's high-water `RecordId` immediately before the scan, then after it reports
+  the detection(s) attributable to the scan. Encodes the "assume visibility, then validate it"
+  principle — a scan with no alert, an alert lacking a threat name, or a missing source are each
+  emitted as `Findings`. Adds the `OffsetInspect.TelemetryCorrelation` object as a `Telemetry`
+  property on `ThreatScanResult` (`AlertGenerated`, `Alert`, `DefenderEvents`,
+  `CorrelationConfidence`, `SourcesAccessible`, `SourcesUnavailable`, `Findings`).
+  - Primary source is the Microsoft Defender Operational log (event 1116/1117), which is
+    readable **non-admin**. Correlation is by `RecordId` (monotonic, timezone-proof — the
+    Get-WinEvent `StartTime` filter is local-time and would silently exclude events).
+  - Confidence is **High** only when a detection's `Source Name` matches the provider (AMSI)
+    **and** its process matches the scanning host, so a coincidental concurrent detection is
+    never claimed. Medium is source-only; Low is neither.
+  - Sysmon and the Security log are reported as **visibility gaps** when absent or requiring
+    elevation, rather than failing. Windows-only; inert unless `-CaptureTelemetry` is passed.
+  - New private module `Threat.Telemetry.ps1` with pure, unit-tested event parsers and
+    confidence scoring (fixture-based, so they run cross-platform in CI without a live provider).
+
+## [3.1.3] - 2026-07-20
+
+Bug-fix release. No command, parameter, or output-schema changes.
+
+### Fixed
+
+- **imphash now resolves ordinal imports from `ws2_32`/`wsock32`/`oleaut32` to their real
+  function names, matching pefile and VirusTotal.** `Get-OffsetPEInfo`/`Get-OffsetIOC`
+  previously rendered every ordinal import as `ord<N>`, so a binary importing those
+  libraries by ordinal — a common malware networking pattern — produced an imphash that
+  did not match the value analysts look up on VirusTotal (which uses pefile). The imphash
+  was correct but non-correlatable for those samples, the opposite of its purpose. Ordinals
+  from those three libraries are now resolved via pefile's tables; all other ordinal imports
+  still render `ord<N>`, exactly as pefile does. Verified: `Get-OffsetIOC` matches pefile on
+  the previously-divergent special-ordinal binaries, and stays byte-identical to the native
+  OffsetScan engine.
+
+### Added
+
+- `Private/Core.PE.Ordinals.ps1`: pefile's `ws2_32`/`wsock32`/`oleaut32` ordinal->name
+  tables (696 entries, generated verbatim from pefile 2024.8.26), plus a `Get-OISpecialOrdinalName`
+  regression test. Kept in lockstep with OffsetScan's `src/ordinals.rs`.
+
+## [3.1.2] - 2026-07-20
+
+Bug-fix release. No command, parameter, or output-schema changes.
+
+### Fixed
+
+- **`Get-OffsetPEInfo` and `Get-OffsetIOC` returned a null `ImpHash` and zero imports for
+  every 32-bit (PE32) binary.** The ordinal-import flag was constructed as
+  `[uint64]0x80000000`, but PowerShell parses the literal `0x80000000` as the negative
+  `Int32` value `-2147483648`, and casting a negative number to `UInt64` throws. Import
+  parsing therefore aborted on its first statement for all PE32 files; the exception was
+  caught and recorded only in the `Warnings` collection, which `Get-OffsetIOC` does not
+  surface — so the failure was invisible. The PE32+ (x64) branch already used a hex-string
+  conversion to sidestep the same overflow class; the PE32 branch now does too. Verified
+  against `SysWOW64\kernel32.dll` (imphash `5c665927b146db2f5155688ad978e69f`, 102 imports)
+  and a 32-bit .NET assembly, both matching the native OffsetScan engine field-for-field.
+
+### Impact
+
+- imphash is a primary indicator for malware clustering, and a large fraction of malware
+  ships as 32-bit PE32. Prior versions silently produced no imphash for those samples, so a
+  triage row or report could omit the single most useful correlation key with no error
+  shown. Any 32-bit sample analyzed with 3.0.0–3.1.1 should be re-run.
+
+### Added
+
+- A regression test that builds a minimal but complete PE32 with a real import directory and
+  asserts a populated imphash and import list with no warnings. The previous PE test corpus
+  was entirely PE32+ (x64), so the 32-bit import path had no coverage.
+
+## [3.1.1] - 2026-07-20
+
+Bug-fix release. No command, parameter, or output-schema changes.
+
+### Fixed
+
+- **`Get-OffsetString` split a string straddling a read-window seam into two truncated
+  halves.** The file is scanned in bounded-memory windows (1 MiB by default); a run that
+  reached the end of a window was emitted as-is and the remainder reported separately as a
+  new string. An indicator spanning a seam — a URL, C2 domain, or mutex name — was therefore
+  reported as two fragments, and a filter such as `Where-Object Value -match 'http'` could
+  miss it entirely. A trailing run is now held back and scanned with the following window,
+  so a straddling string is reported once, whole. The one remaining exception is a string
+  longer than an entire window, which is still split rather than stalling the read.
+- **`Get-OffsetString` results no longer depend on `-WindowSize`.** Because seam splits
+  inflated the count, the same file returned different results at different window sizes.
+  Verified on `ntdll.dll` (2,517,928 bytes): 32,506 strings at every window size from 4 KiB
+  to 64 MiB, previously 32,507 at the 1 MiB default versus 32,506 unwindowed.
+- **`Get-OffsetIOC`'s `PrintableStringCount` is now deterministic** for files larger than the
+  default window. It calls `Get-OffsetString` and exposes no `-WindowSize`, so it inherited
+  the seam-split inflation with no way for a caller to control it.
+
+### Changed
+
+- Cross-engine parity with the native [OffsetScan](https://github.com/warpedatom/OffsetScan)
+  engine is now exact for string extraction. `Get-OffsetString` and `offsetscan strings`
+  return set-identical results (offset, encoding, and value) on `ntdll.dll` — 32,506 hits,
+  zero entries unique to either engine, holding even at a 4 KiB window (~600 seams).
+  OffsetScan 0.1.1 fixes the corresponding defect on its side.
+
+### Added
+
+- Regression tests for ASCII and UTF-16LE strings straddling a window seam, window-size
+  independence of the result set, and the trailing-run measurement itself (including the
+  NUL-padding and run-fills-the-buffer cases that keep the carry-over bounded).
+
+## [3.1.0] - 2026-07-19
+
+All-additive minor release. Existing commands, parameters, and output-schema field
+meanings are unchanged.
+
+### Added
+
+- `Get-OffsetDetectionTrigger` — correlates a detection boundary to the content that most
+  likely produced it. Because a prefix boundary is the last byte of the earliest detected
+  prefix, the trigger is a run ending at that offset; the command reports the PE section the
+  boundary falls in, the entropy of the run up to it (plaintext vs packed/encoded), and the
+  extracted strings ending at or straddling the boundary ranked by proximity (the candidate
+  signature content), with a one-line interpretation. Works on a `ThreatScanResult` pipeline
+  or a `-FilePath`/`-BoundaryOffset` pair. Read-only and cross-platform. New output object
+  `OffsetInspect.DetectionTrigger`.
+- Detection-drift journaling. `Add-OffsetDriftEntry` records append-only NDJSON snapshots
+  (file SHA-256, status, boundary, signature name, and the local Microsoft Defender
+  signature/engine versions) from a result pipeline or a file. `Get-OffsetDrift` reads the
+  journal and, for each file, explains every transition as a **file modification** (SHA-256
+  changed), a **signature-database update** (Defender signature version changed with the file
+  unchanged), or a **non-deterministic** provider result. New output objects
+  `OffsetInspect.DriftEntry` and `OffsetInspect.DriftReport`.
+- `Export-OffsetThreatReport -IocJsonPath` — sources IOC panels from the native OffsetScan
+  engine's JSON (`offsetscan ioc <corpus> > ioc.json`) instead of re-scanning each file in
+  PowerShell; `-IncludeIoc` becomes the live fallback for files absent from the JSON.
+- `Export-OffsetThreatReport -IncludeTrigger` — embeds detection-trigger analysis in the
+  Markdown and HTML reports.
+- `Invoke-OffsetMutationTest` — for authorized engagements, tests how robust a signature is by
+  applying standard perturbations (case inversion, string-literal concatenation, comment
+  insertion, whitespace injection) to a detected sample and re-scanning each variant with AMSI
+  to report which transform classes neutralize detection. Everything runs in memory; no variant
+  is written to disk, and the command refuses to run without `-AuthorizedEngagement`. New output
+  object `OffsetInspect.MutationTestResult`.
+
+### Fixed
+
+- Hardened Windows PowerShell 5.1 module-scope parsing of top-level JSON arrays, which the
+  new `-IocJsonPath` ingestion path depends on.
+
 ## [3.0.0] - 2026-07-12
 
 ### Added
