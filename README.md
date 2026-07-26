@@ -22,6 +22,15 @@ OffsetInspect answers a practical analyst question:
 
 It also provides an OffsetInspect-native detection-boundary workflow inspired by the same analyst problem addressed by ThreatCheck, without bundling its source or binaries: it locates the earliest content prefix that AMSI or Microsoft Defender still detects, validates the boundary repeatedly, and feeds the resulting offset straight into the context inspector. On top of that core, it adds a red-team analysis and static-triage suite — multi-region discovery, corpus scanning, detection diffing, detection-trigger correlation, drift journaling, engagement reports, entropy analysis, string extraction, and PE/imphash parsing — all read-only, plus an authorized-use signature-robustness tester that perturbs samples only in memory, and without ever disabling or reconfiguring endpoint protection.
 
+## Companion tool
+
+For corpus-scale static triage (PE parsing, entropy, strings, IOC) without
+PowerShell overhead, see **[OffsetScan](https://github.com/warpedatom/OffsetScan)**
+— a native Rust binary with the same JSON output schema. OffsetInspect 3.1.0+
+ingests OffsetScan IOC JSON directly via `-IocJsonPath`.
+
+---
+
 ## Highlights
 
 - Opens each unique inspection file through a stable read handle and processes all requested offsets together.
