@@ -1,6 +1,6 @@
 @{
     RootModule           = 'OffsetInspect.psm1'
-    ModuleVersion        = '3.1.3'
+    ModuleVersion        = '3.2.0'
     GUID                 = '2d9f6f83-2c4f-4a6e-8a53-1cf9a5fbc2f6'
     Author               = 'Jared Perry (Velkris)'
     CompanyName          = 'DreadHost Research'
@@ -31,6 +31,7 @@
         'Private/Threat.Mutation.ps1',
         'Private/Threat.Region.ps1',
         'Private/Threat.Search.ps1',
+        'Private/Threat.Telemetry.ps1',
         'Private/Threat.Text.ps1',
         'Private/Threat.Trigger.ps1',
         'Private/Threat.Yara.ps1',
@@ -91,6 +92,9 @@
             LicenseUri = 'https://github.com/warpedatom/OffsetInspect/blob/main/LICENSE'
             ProjectUri = 'https://github.com/warpedatom/OffsetInspect'
             ReleaseNotes = @'
+OffsetInspect 3.2.0
+- Adds telemetry correlation: Invoke-OffsetThreatScan -CaptureTelemetry snapshots the Windows telemetry high-water marks before a scan and, after it, reports whether the action generated a defender alert, with what context (threat name, severity, detection source, process, user), and which telemetry sources were blind. Encodes the "assume visibility, then validate it" principle: absence of an alert, an alert without context, or a missing source are each surfaced as findings. Adds the OffsetInspect.TelemetryCorrelation object (Telemetry property on ThreatScanResult). Primary source is the Microsoft Defender Operational log (1116/1117), read non-admin; correlation is by RecordId (timezone-proof) with confidence scored High only on matching detection source AND scanning process. Sysmon/Security are reported as visibility gaps when absent or inaccessible. Windows-only; off unless -CaptureTelemetry is passed.
+
 OffsetInspect 3.1.3
 - imphash now resolves ordinal imports from ws2_32/wsock32/oleaut32 to their real function names, matching pefile and VirusTotal. Previously these rendered as ord<N>, so any binary importing those libraries by ordinal (a common malware networking pattern) produced an imphash that would not match VirusTotal, defeating imphash's purpose of correlating a sample against threat intel. Other ordinal imports still render ord<N>, as pefile does. New private tables Core.PE.Ordinals.ps1 (696 entries, generated from pefile), kept in lockstep with the OffsetScan engine.
 

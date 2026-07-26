@@ -9,6 +9,33 @@ All notable changes to OffsetInspect are documented in this file. The project fo
 - Additional provider adapters after the v2 provider contract has received field testing.
 - Published benchmark baselines for representative text and binary corpora.
 
+## [3.2.0] - 2026-07-21
+
+Feature release. Additive; existing commands, parameters, and output-schema field meanings
+are unchanged.
+
+### Added
+
+- **Telemetry correlation.** `Invoke-OffsetThreatScan -CaptureTelemetry` correlates a scan with
+  the Windows telemetry it generates and reports whether the action was *seen* by the defender:
+  was an alert raised, with what context, and which telemetry sources were blind. It captures
+  each accessible log's high-water `RecordId` immediately before the scan, then after it reports
+  the detection(s) attributable to the scan. Encodes the "assume visibility, then validate it"
+  principle — a scan with no alert, an alert lacking a threat name, or a missing source are each
+  emitted as `Findings`. Adds the `OffsetInspect.TelemetryCorrelation` object as a `Telemetry`
+  property on `ThreatScanResult` (`AlertGenerated`, `Alert`, `DefenderEvents`,
+  `CorrelationConfidence`, `SourcesAccessible`, `SourcesUnavailable`, `Findings`).
+  - Primary source is the Microsoft Defender Operational log (event 1116/1117), which is
+    readable **non-admin**. Correlation is by `RecordId` (monotonic, timezone-proof — the
+    Get-WinEvent `StartTime` filter is local-time and would silently exclude events).
+  - Confidence is **High** only when a detection's `Source Name` matches the provider (AMSI)
+    **and** its process matches the scanning host, so a coincidental concurrent detection is
+    never claimed. Medium is source-only; Low is neither.
+  - Sysmon and the Security log are reported as **visibility gaps** when absent or requiring
+    elevation, rather than failing. Windows-only; inert unless `-CaptureTelemetry` is passed.
+  - New private module `Threat.Telemetry.ps1` with pure, unit-tested event parsers and
+    confidence scoring (fixture-based, so they run cross-platform in CI without a live provider).
+
 ## [3.1.3] - 2026-07-20
 
 Bug-fix release. No command, parameter, or output-schema changes.

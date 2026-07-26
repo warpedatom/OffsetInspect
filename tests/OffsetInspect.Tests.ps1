@@ -36,9 +36,9 @@ AfterAll {
     Remove-Module OffsetInspect -Force -ErrorAction SilentlyContinue
 }
 Describe 'OffsetInspect module package' {
-    It 'has a valid 3.1.3 manifest' {
+    It 'has a valid 3.2.0 manifest' {
         $manifest = Test-ModuleManifest -Path $ManifestPath -ErrorAction Stop
-        $manifest.Version.ToString() | Should -Be '3.1.3'
+        $manifest.Version.ToString() | Should -Be '3.2.0'
         $manifest.RootModule | Should -Be 'OffsetInspect.psm1'
     }
 
@@ -1922,6 +1922,61 @@ Describe 'Signature-robustness mutation testing' {
         $f = Join-Path $TestDrive 'sample.txt'
         Set-Content -LiteralPath $f -Value 'hello world'
         { Invoke-OffsetMutationTest -FilePath $f -AuthorizedEngagement:$false } | Should -Throw -ExpectedMessage '*authorized*'
+    }
+}
+
+Describe 'Telemetry correlation' {
+    BeforeAll {
+        # A minimal Microsoft Defender 1116 event, with the real EventData/Data shape and a
+        # deliberately empty element to exercise the StrictMode-safe parse.
+        $script:DefenderEventXml = @'
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+  <System><EventID>1116</EventID></System>
+  <EventData>
+    <Data Name="Threat Name">Trojan:Win32/TestSample</Data>
+    <Data Name="Severity Name">Severe</Data>
+    <Data Name="Category Name">Trojan</Data>
+    <Data Name="Source Name">AMSI</Data>
+    <Data Name="Process Name">C:\Program Files\PowerShell\7\pwsh.exe</Data>
+    <Data Name="Detection User">CORP\analyst</Data>
+    <Data Name="Path">amsi:_\Device\HarddiskVolume3\sample.ps1</Data>
+    <Data Name="Action Name">Not Applicable</Data>
+    <Data Name="Extra Sensor" />
+  </EventData>
+</Event>
+'@
+    }
+
+    It 'parses named EventData fields and tolerates empty Data elements under StrictMode' {
+        $fields = InModuleScope OffsetInspect -Parameters @{ X = $script:DefenderEventXml } {
+            param($X) ConvertFrom-OIWinEventDataField -Xml $X
+        }
+        $fields['Threat Name'] | Should -Be 'Trojan:Win32/TestSample'
+        $fields['Source Name'] | Should -Be 'AMSI'
+        $fields['Extra Sensor'] | Should -Be ''  # empty element must be present, not throw
+    }
+
+    It 'shapes a Defender detection record with the schema fields' {
+        $rec = InModuleScope OffsetInspect -Parameters @{ X = $script:DefenderEventXml } {
+            param($X) ConvertFrom-OIDefenderDetectionEvent -Xml $X -EventId 1116 -RecordId 4242
+        }
+        $rec.ThreatName | Should -Be 'Trojan:Win32/TestSample'
+        $rec.SeverityName | Should -Be 'Severe'
+        $rec.SourceName | Should -Be 'AMSI'
+        $rec.ProcessName | Should -Be 'C:\Program Files\PowerShell\7\pwsh.exe'
+        $rec.EventId | Should -Be 1116
+        $rec.RecordId | Should -Be 4242
+    }
+
+    It 'scores confidence High only on source AND process match' {
+        $probe = {
+            param($Src, $HostPath)
+            $evt = [pscustomobject]@{ SourceName = 'AMSI'; ProcessName = 'C:\pwsh.exe' }
+            Get-OITelemetryEventConfidence -Event $evt -ExpectedSource $Src -HostProcessPath $HostPath
+        }
+        (InModuleScope OffsetInspect -Parameters @{ Src = 'AMSI'; HostPath = 'C:\pwsh.exe' } $probe) | Should -Be 'High'
+        (InModuleScope OffsetInspect -Parameters @{ Src = 'AMSI'; HostPath = 'C:\other.exe' } $probe) | Should -Be 'Medium'
+        (InModuleScope OffsetInspect -Parameters @{ Src = 'Real-Time Protection'; HostPath = 'C:\other.exe' } $probe) | Should -Be 'Low'
     }
 }
 
