@@ -128,6 +128,25 @@ No variant is written to disk. Added in 3.1.0.
 | `EvasionCount` | Int32 | How many transform classes neutralized detection |
 | `RobustnessSummary` | String | One-line read of signature brittleness |
 
+## `OffsetInspect.TelemetryCorrelation`
+
+The `Telemetry` property of a `ThreatScanResult` when `Invoke-OffsetThreatScan -CaptureTelemetry`
+is used ($null otherwise). Correlates the scan with the Windows telemetry it generated — whether
+a Microsoft Defender alert was raised, with what context, and which sources were blind. Windows-only.
+Added in 3.2.0.
+
+| Property | Type | Meaning |
+|---|---|---|
+| `AlertGenerated` | Boolean | Whether a Defender detection (event 1116/1117) was logged for this scan |
+| `Alert` | Object or null | Highest-confidence detection: `ThreatName`, `ThreatId`, `SeverityName`, `CategoryName`, `SourceName`, `ProcessName`, `DetectionUser`, `Path`, `ActionName`, `FwLink`, `EventId`, `RecordId`, `TimeCreated` |
+| `DefenderEvents` | Object[] | All new Defender detection records attributable to the scan (RecordId past the pre-scan high-water) |
+| `CorrelationConfidence` | String | `High` (detection source + scanning process both match), `Medium` (source only), `Low` (neither), or `None` |
+| `SourcesChecked` | String[] | Telemetry sources considered (`Defender`, `PowerShell`, `Sysmon`, `Security`) |
+| `SourcesAccessible` | String[] | Sources readable in this session |
+| `SourcesUnavailable` | Object[] | Blind sources: `Key`, `LogName`, `Reason` (`not present` / `requires elevation`) |
+| `Findings` | String[] | Plain-language conclusions (alert with/without context, no telemetry, visibility gaps) |
+| `PollDurationMs` | Double | Time spent polling for asynchronously-written Defender events |
+
 ## Serialization
 
 - `Invoke-OffsetInspect -Json` always emits an array.

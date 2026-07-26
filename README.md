@@ -39,6 +39,7 @@ It also provides an OffsetInspect-native detection-boundary workflow inspired by
 - Correlates a detection boundary to the content that produced it — the PE section, the entropy of the run up to the boundary, and the strings ending at/straddling it as candidate signature content.
 - Journals detection over time (file hash **and** the local Defender signature version) so a change in detectability can be attributed to the file, to a signature-database update, or to a non-deterministic provider result.
 - Tests signature robustness for authorized engagements by perturbing a detected sample **in memory** (case, concatenation, comment, whitespace) and reporting which transform classes evade — no variant is ever written to disk.
+- Correlates a scan with the Windows telemetry it generates (`-CaptureTelemetry`): whether a Microsoft Defender alert was raised, with what context, and which telemetry sources were blind — encoding the "assume visibility, then validate it" principle. Read-only, non-admin, Windows-only.
 - Adds static malware-triage helpers: per-window entropy (packed/encrypted regions), ASCII/UTF-16LE string extraction with offsets, and PE header/section/import parsing with imphash and overlay detection.
 - Never changes Defender exclusions, real-time protection, or system security configuration.
 - Ships as a self-contained PowerShell Gallery package with no external runtime dependencies; YARA and ClamAV scanning are the only optional exceptions, each requiring its own external engine.
@@ -381,6 +382,25 @@ Invoke-OffsetMutationTest -FilePath ./flagged.ps1 -AuthorizedEngagement |
 ```
 
 A result of, say, "brittle: neutralized by StringConcatenation, CommentInsertion" tells a defender the signature keys on a contiguous literal and should be broadened; it tells an authorized operator the same thing about a control's coverage.
+
+### Telemetry correlation
+
+Detecting a boundary tells you what the *engine* sees; `-CaptureTelemetry` tells you what the *defender* sees. It snapshots each accessible Windows telemetry log's high-water mark before the scan, then reports whether the action raised an alert, with what context, and which sources were blind — the "assume visibility, then validate it" question, answered with evidence.
+
+```powershell
+$r = Invoke-OffsetThreatScan ./flagged.ps1 -Engine AMSI -CaptureTelemetry -PassThru
+$r.Telemetry | Format-List AlertGenerated, CorrelationConfidence, Findings
+$r.Telemetry.Alert | Format-List ThreatName, SeverityName, SourceName, ProcessName, DetectionUser
+```
+
+The `Telemetry` property (`OffsetInspect.TelemetryCorrelation`) reports:
+
+- `AlertGenerated` / `Alert` — whether a Microsoft Defender detection (event 1116/1117) was logged for the scan, and its context (threat name, severity, detection source, process, user).
+- `CorrelationConfidence` — **High** only when the detection's source matches the provider **and** its process matches the scanning host, so a coincidental concurrent detection is never claimed; Medium on source alone; Low on neither.
+- `SourcesAccessible` / `SourcesUnavailable` — which telemetry logs were readable and which were blind (Sysmon absent, the Security log requiring elevation). A visibility gap is itself a finding.
+- `Findings` — plain-language conclusions: an alert with full context, an alert lacking a threat name, no telemetry at all, or a missing source.
+
+The primary source is the Microsoft Defender Operational log, readable without elevation; correlation is by event `RecordId` (monotonic and timezone-independent). Windows-only, and inert unless `-CaptureTelemetry` is passed.
 
 ## Static triage helpers
 

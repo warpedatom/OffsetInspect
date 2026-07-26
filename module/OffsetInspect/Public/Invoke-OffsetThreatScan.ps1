@@ -67,6 +67,11 @@ function Invoke-OffsetThreatScan {
 
         [switch]$IncludeProviderOutput,
 
+        # Correlate this scan with the Windows telemetry it generates (Defender detection
+        # events), reporting whether an alert was raised, with what context, and which
+        # telemetry sources were blind. Windows-only; adds a Telemetry property to the result.
+        [switch]$CaptureTelemetry,
+
         # No [ValidateNotNullOrEmpty()]: an unbound [string] is '' (empty) under
         # Windows PowerShell 5.1, and the scanner closures capture this scope via
         # .GetNewClosure(), which rejects an empty value carrying that attribute.
@@ -336,6 +341,10 @@ function Invoke-OffsetThreatScan {
             }.GetNewClosure()
         }
 
+        # Snapshot telemetry high-water marks immediately before any probe runs, so the
+        # correlation afterward sees only events this scan produced.
+        $telemetrySnapshot = if ($CaptureTelemetry) { Get-OITelemetrySnapshot } else { $null }
+
         $search = Invoke-OIPrefixBoundarySearch `
             -UnitCount $unitCount `
             -Scanner $scanner `
@@ -452,11 +461,18 @@ function Invoke-OffsetThreatScan {
             ProviderOutput           = $providerOutput
             ProbeLog                 = if ($null -ne $search -and $null -ne $search.PSObject.Properties['ProbeLog']) { $search.ProbeLog } else { @() }
             Inspection               = $inspection
+            Telemetry                = $null
             DurationMs               = [Math]::Round($watch.Elapsed.TotalMilliseconds, 3)
             Warnings                 = $warnings.ToArray()
             Error                    = $null
         }
         $result.PSObject.TypeNames.Insert(0, 'OffsetInspect.ThreatScanResult')
+
+        if ($CaptureTelemetry -and $null -ne $telemetrySnapshot) {
+            $hostProcessPath = try { [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName } catch { $null }
+            $correlationEngine = if ($selectedEngine -eq 'AMSI') { 'AMSI' } else { 'Defender' }
+            $result.Telemetry = Get-OITelemetryCorrelation -Snapshot $telemetrySnapshot -Engine $correlationEngine -HostProcessPath $hostProcessPath
+        }
     }
     catch {
         $watch.Stop()
@@ -499,6 +515,7 @@ function Invoke-OffsetThreatScan {
             ProviderOutput           = $providerOutput
             ProbeLog                 = if ($null -ne $search -and $null -ne $search.PSObject.Properties['ProbeLog']) { $search.ProbeLog } else { @() }
             Inspection               = $null
+            Telemetry                = $null
             DurationMs               = [Math]::Round($watch.Elapsed.TotalMilliseconds, 3)
             Warnings                 = $warnings.ToArray()
             Error                    = $errorMessage
