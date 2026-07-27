@@ -10,6 +10,7 @@
   <img src="https://img.shields.io/badge/Threat%20Providers-Windows-0078D4" alt="Windows threat providers">
   <img src="https://img.shields.io/github/actions/workflow/status/warpedatom/OffsetInspect/ci.yml?branch=main&label=CI" alt="CI">
   <a href="./SECURITY.md"><img src="https://img.shields.io/badge/Security-Policy-green" alt="Security policy"></a>
+  <a href="https://x.com/warped_atom"><img src="https://img.shields.io/badge/X-%40warped__atom-000000?logo=x&logoColor=white" alt="X (Twitter): @warped_atom"></a>
 </p>
 
 # OffsetInspect
