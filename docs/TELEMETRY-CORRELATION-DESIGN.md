@@ -1,6 +1,10 @@
 # Design: Telemetry Correlation (OffsetInspect 3.2.0)
 
-Status: **Draft** · Target: early September 2026 · Author/design: warpedatom
+Status: **Shipped** in OffsetInspect 3.2.0 (2026-07-21) · Author/design: warpedatom
+
+> This document is the original design record, retained as-is for context. The feature shipped
+> as specified; where the final implementation differs from a proposal below, the shipped
+> behavior is authoritative (see `CHANGELOG.md`, `docs/OUTPUT-SCHEMA.md`, and the README).
 
 ## Goal
 

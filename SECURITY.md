@@ -4,11 +4,11 @@
 
 | Version | Security support |
 |---|---|
-| 2.x | Supported |
-| 1.x | End of life |
-| < 1.0 | Unsupported |
+| 3.x | Supported |
+| 2.x | End of life |
+| < 2.0 | Unsupported |
 
-Security fixes are released against the latest 2.x version. Upgrade before reporting an issue that may already be resolved.
+Security fixes are released against the latest 3.x version. Upgrade before reporting an issue that may already be resolved.
 
 ## Reporting a vulnerability
 
