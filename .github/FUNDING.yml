@@ -1,0 +1,12 @@
+# The Sponsor button shows only for platforms you actually enroll in.
+# Uncomment the line(s) you set up and delete the rest.
+
+# GitHub Sponsors — requires enrolling at https://github.com/sponsors (Stripe/bank setup)
+# github: [warpedatom]
+
+# One-off / recurring tip jars — fastest to set up, no approval needed:
+# ko_fi: yourname               # https://ko-fi.com/yourname
+# buy_me_a_coffee: yourname     # https://buymeacoffee.com/yourname
+
+# Any other URL (Liberapay, PayPal.me, etc.)
+# custom: ["https://..."]
