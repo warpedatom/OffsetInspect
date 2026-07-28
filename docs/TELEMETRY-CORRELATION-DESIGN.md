@@ -18,7 +18,7 @@ answer, with evidence:
 - Which telemetry sources were **absent or inaccessible** (a visibility gap is itself a finding)?
 
 This turns a boundary scan from "what does the engine detect" into "what does the *defender*
-see when this behavior occurs" — the question that matters for detection validation and
+see when this behavior occurs" - the question that matters for detection validation and
 purple-team work.
 
 ## Feasibility (validated on a Windows 11 box, 2026-07-21)
@@ -28,7 +28,7 @@ Confirmed by recon against a real, non-elevated session with live detections:
 | Source | Log | State | Notes |
 |---|---|---|---|
 | **Microsoft Defender** | `Microsoft-Windows-Windows Defender/Operational` | present, enabled, **readable non-admin** | Primary. 1116 = detection, 1117 = action taken. |
-| **PowerShell** | `Microsoft-Windows-PowerShell/Operational` | present, enabled, readable | 4104 script block, 4103 module — the AMSI/script side. |
+| **PowerShell** | `Microsoft-Windows-PowerShell/Operational` | present, enabled, readable | 4104 script block, 4103 module - the AMSI/script side. |
 | Sysmon | `Microsoft-Windows-Sysmon/Operational` | **not installed here** | Optional; report as a gap when absent. |
 | AMSI | `Microsoft-Windows-AMSI/Operational` | not present | AMSI detections surface via Defender (Source Name = AMSI). |
 | Security | `Security` | **needs elevation** | Report as inaccessible when non-admin. |
@@ -50,11 +50,11 @@ correlation to the scan that produced it.
 ## Correlation approach
 
 1. **Snapshot** immediately before the scan: capture `TimeCreated` and the highest `RecordId`
-   for each accessible log (RecordId is monotonic — cheaper and more reliable than time alone
+   for each accessible log (RecordId is monotonic - cheaper and more reliable than time alone
    for "events since").
 2. **Run** the provider action (existing `Invoke-OffsetThreatScan` path).
 3. **Poll** each accessible log for records with `RecordId > snapshot` (Defender writes events
-   asynchronously — allow a short bounded poll, e.g. up to ~5 s, before concluding "no
+   asynchronously - allow a short bounded poll, e.g. up to ~5 s, before concluding "no
    telemetry").
 4. **Match** candidates to the action by, in order of strength:
    - `Process Name` == the OffsetInspect host process,
@@ -87,7 +87,7 @@ DefenderEvents        [ { Id; RecordId; TimeCreated; ...fields } ]
 ScriptEvents          [ { Id=4104; RecordId; TimeCreated } ]
 CorrelationConfidence High | Medium | Low
 Findings              [ "Alert generated with full context",
-                        "Sysmon not present — process-creation telemetry unavailable" ]
+                        "Sysmon not present - process-creation telemetry unavailable" ]
 ```
 
 `Findings` renders the principle literally: no alert → *"Absence of an alert is a finding"*;
@@ -115,19 +115,19 @@ result; degraded coverage is reported, not fatal.
 
 ## Open questions / risks
 
-- Defender event **write latency** — the poll window needs tuning; too short flakes, too long
+- Defender event **write latency** - the poll window needs tuning; too short flakes, too long
   slows the scan. Measure on real detections.
-- **Correlation false positives** under concurrent activity — confidence scoring mitigates;
+- **Correlation false positives** under concurrent activity - confidence scoring mitigates;
   consider requiring process match for High.
-- Defender **event schema drift** across engine versions — parse defensively by field `Name`,
+- Defender **event schema drift** across engine versions - parse defensively by field `Name`,
   not positional index; fixture tests pin the fields we rely on.
-- Non-admin **Security-log** blindness — documented as a known limitation, not worked around.
+- Non-admin **Security-log** blindness - documented as a known limitation, not worked around.
 
 ## Milestones (~6 weeks)
 
-- **Wk 1–2:** finalize schema; `Get-OIWinEventSnapshot` + query helpers; Defender/PS event
+- **Wk 1-2:** finalize schema; `Get-OIWinEventSnapshot` + query helpers; Defender/PS event
   parsers with XML fixtures + unit tests.
-- **Wk 3–4:** correlation engine + confidence scoring + `OffsetInspect.TelemetryCorrelation`
+- **Wk 3-4:** correlation engine + confidence scoring + `OffsetInspect.TelemetryCorrelation`
   object; wire `-CaptureTelemetry` into the scan.
 - **Wk 5:** `Export-OffsetThreatReport -IncludeTelemetry`; EICAR-based end-to-end tests;
   gap/negative/timing cases.

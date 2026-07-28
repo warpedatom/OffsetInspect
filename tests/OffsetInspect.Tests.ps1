@@ -36,15 +36,15 @@ AfterAll {
     Remove-Module OffsetInspect -Force -ErrorAction SilentlyContinue
 }
 Describe 'OffsetInspect module package' {
-    It 'has a valid 3.2.0 manifest' {
+    It 'has a valid 3.3.0 manifest' {
         $manifest = Test-ModuleManifest -Path $ManifestPath -ErrorAction Stop
-        $manifest.Version.ToString() | Should -Be '3.2.0'
+        $manifest.Version.ToString() | Should -Be '3.3.0'
         $manifest.RootModule | Should -Be 'OffsetInspect.psm1'
     }
 
     It 'exports only the supported public commands' {
         $commands = @(Get-Command -Module OffsetInspect | Select-Object -ExpandProperty Name | Sort-Object)
-        ($commands -join ',') | Should -Be 'Add-OffsetDriftEntry,Compare-OffsetThreatResult,Export-OffsetThreatReport,Get-OffsetDetectionTrigger,Get-OffsetDrift,Get-OffsetEntropy,Get-OffsetIOC,Get-OffsetPEInfo,Get-OffsetString,Invoke-OffsetClamScan,Invoke-OffsetInspect,Invoke-OffsetMutationTest,Invoke-OffsetThreatScan,Invoke-OffsetThreatScanBatch,Invoke-OffsetThreatScanRegion,Invoke-OffsetYaraScan'
+        ($commands -join ',') | Should -Be 'Add-OffsetDriftEntry,Compare-OffsetThreatResult,Export-OffsetThreatReport,Get-OffsetDetectionTrigger,Get-OffsetDrift,Get-OffsetEntropy,Get-OffsetIOC,Get-OffsetPEInfo,Get-OffsetSignature,Get-OffsetString,Invoke-OffsetClamScan,Invoke-OffsetInspect,Invoke-OffsetMutationTest,Invoke-OffsetThreatScan,Invoke-OffsetThreatScanBatch,Invoke-OffsetThreatScanRegion,Invoke-OffsetYaraScan'
     }
 
     It 'imports from an isolated Gallery-style folder' {
@@ -2003,5 +2003,99 @@ Describe 'ClamAV output parsing' {
         $result = InModuleScope OffsetInspect { ConvertFrom-OIClamScanOutput -Output '' -ExitCode 2 -FilePath 'x' -RawError 'ERROR: Could not load database' }
         $result.Status | Should -Be 'Error'
         $result.Error | Should -Match 'database'
+    }
+}
+
+Describe 'Authenticode signature shaping' {
+    It 'shapes a valid catalog-signed result with the signer details' {
+        $info = InModuleScope OffsetInspect {
+            $sig = [pscustomobject]@{
+                Status                 = 'Valid'
+                StatusMessage          = 'Signature verified.'
+                SignatureType          = 'Catalog'
+                IsOSBinary             = $true
+                SignerCertificate      = [pscustomobject]@{
+                    Subject      = 'CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US'
+                    Issuer       = 'CN=Microsoft Windows Production PCA 2011, O=Microsoft Corporation'
+                    Thumbprint   = 'DC91E564D5BC1E3A8E02D6A8508682ABEA8A2443'
+                    SerialNumber = '33000002ABCD'
+                    NotBefore    = (Get-Date).AddYears(-1)
+                    NotAfter     = (Get-Date).AddYears(1)
+                }
+                TimeStamperCertificate = [pscustomobject]@{ Subject = 'CN=Microsoft Time-Stamp Service, O=Microsoft Corporation' }
+            }
+            ConvertTo-OISignatureInfo -Signature $sig -File 'kernel32.dll' -FileSize 836232
+        }
+        $info.PSObject.TypeNames | Should -Contain 'OffsetInspect.SignatureInfo'
+        $info.IsSigned | Should -BeTrue
+        $info.Status | Should -Be 'Valid'
+        $info.SignatureType | Should -Be 'Catalog'
+        $info.IsCatalogSigned | Should -BeTrue
+        $info.IsOSBinary | Should -BeTrue
+        $info.SignerName | Should -Be 'Microsoft Windows'
+        $info.SignerThumbprint | Should -Be 'DC91E564D5BC1E3A8E02D6A8508682ABEA8A2443'
+        $info.SignerExpired | Should -BeFalse
+        $info.IsTimestamped | Should -BeTrue
+        $info.TimestamperName | Should -Be 'Microsoft Time-Stamp Service'
+    }
+
+    It 'shapes an unsigned result with null signer fields' {
+        $info = InModuleScope OffsetInspect {
+            $sig = [pscustomobject]@{
+                Status                 = 'NotSigned'
+                StatusMessage          = 'The file is not digitally signed.'
+                SignatureType          = 'None'
+                IsOSBinary             = $false
+                SignerCertificate      = $null
+                TimeStamperCertificate = $null
+            }
+            ConvertTo-OISignatureInfo -Signature $sig -File 'sample.exe' -FileSize 4096
+        }
+        $info.IsSigned | Should -BeFalse
+        $info.Status | Should -Be 'NotSigned'
+        $info.IsCatalogSigned | Should -BeFalse
+        $info.SignerName | Should -BeNullOrEmpty
+        $info.SignerSubject | Should -BeNullOrEmpty
+        $info.IsTimestamped | Should -BeFalse
+        $info.SignerExpired | Should -BeNullOrEmpty
+    }
+
+    It 'treats a present-but-invalid signature (HashMismatch) as signed' {
+        $info = InModuleScope OffsetInspect {
+            $sig = [pscustomobject]@{
+                Status                 = 'HashMismatch'
+                StatusMessage          = 'The contents of the file were altered.'
+                SignerCertificate      = [pscustomobject]@{ Subject = 'CN=Some Vendor'; NotAfter = (Get-Date).AddYears(1) }
+                TimeStamperCertificate = $null
+            }
+            ConvertTo-OISignatureInfo -Signature $sig -File 'tampered.exe'
+        }
+        # A signer cert is present even though the signature does not validate.
+        $info.IsSigned | Should -BeTrue
+        $info.Status | Should -Be 'HashMismatch'
+        # SignatureType/IsOSBinary are absent on this object: must be null, not a StrictMode throw.
+        $info.SignatureType | Should -BeNullOrEmpty
+        $info.IsOSBinary | Should -BeNullOrEmpty
+        $info.IsCatalogSigned | Should -BeFalse
+    }
+
+    It 'flags an expired signer certificate' {
+        $info = InModuleScope OffsetInspect {
+            $sig = [pscustomobject]@{
+                Status            = 'Valid'
+                SignerCertificate = [pscustomobject]@{ Subject = 'CN=Old Vendor'; NotAfter = (Get-Date).AddDays(-1) }
+            }
+            ConvertTo-OISignatureInfo -Signature $sig -File 'old.exe'
+        }
+        $info.SignerExpired | Should -BeTrue
+    }
+
+    It 'reports a real signed Windows system binary end-to-end' -Skip:($env:OS -ne 'Windows_NT') {
+        $target = Join-Path $env:SystemRoot 'System32\kernel32.dll'
+        $info = Get-OffsetSignature -FilePath $target
+        $info.PSObject.TypeNames | Should -Contain 'OffsetInspect.SignatureInfo'
+        $info.IsSigned | Should -BeTrue
+        $info.Status | Should -Be 'Valid'
+        $info.SignerName | Should -Not -BeNullOrEmpty
     }
 }

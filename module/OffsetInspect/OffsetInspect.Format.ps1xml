@@ -53,5 +53,31 @@
         </TableRowEntries>
       </TableControl>
     </View>
+    <View>
+      <Name>OffsetInspect.SignatureInfo.Table</Name>
+      <ViewSelectedBy>
+        <TypeName>OffsetInspect.SignatureInfo</TypeName>
+      </ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader><Label>File</Label><Width>30</Width></TableColumnHeader>
+          <TableColumnHeader><Label>Signed</Label><Width>7</Width></TableColumnHeader>
+          <TableColumnHeader><Label>Status</Label><Width>14</Width></TableColumnHeader>
+          <TableColumnHeader><Label>Type</Label><Width>12</Width></TableColumnHeader>
+          <TableColumnHeader><Label>Signer</Label></TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem><PropertyName>File</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>IsSigned</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>Status</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>SignatureType</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>SignerName</PropertyName></TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
+    </View>
   </ViewDefinitions>
 </Configuration>

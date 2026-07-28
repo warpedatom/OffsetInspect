@@ -9,7 +9,7 @@ Place this file under `docs/` in the repository.
 ## 1. The scanner contract
 
 The boundary search is provider-agnostic. It receives a single **scanner
-callback** — a `[scriptblock]` invoked positionally with one argument:
+callback** - a `[scriptblock]` invoked positionally with one argument:
 
 ```powershell
 & $scanner <prefixLength>   # [int64] number of units in the prefix to test
@@ -31,16 +31,16 @@ The callback MUST return a single object exposing at least:
 
 A `$null` return, or a null/whitespace `Status`, is normalised to `Status = 'Error'`
 by the search. Exceptions thrown by the callback are caught and converted to
-`Status = 'Error'` with the exception message — a provider crash never aborts the
+`Status = 'Error'` with the exception message - a provider crash never aborts the
 search, it fails it cleanly.
 
 ## 2. Status tokens
 
 `Threat.Search.ps1` classifies every status into exactly one of three buckets:
 
-- **Negative** (`Clean`, `NotDetected`) — the prefix is not detected.
-- **Positive** (`Detected`, `Blocked`) — the prefix is detected.
-- **Non-definitive** (anything else: `Indeterminate`, `Timeout`, `Error`, ...) —
+- **Negative** (`Clean`, `NotDetected`) - the prefix is not detected.
+- **Positive** (`Detected`, `Blocked`) - the prefix is detected.
+- **Non-definitive** (anything else: `Indeterminate`, `Timeout`, `Error`, ...) -
   the provider could not give a trustworthy answer.
 
 Rules the search enforces:
@@ -97,7 +97,7 @@ worker needs isolated resources before any `ForEach-Object -Parallel` is added:
 - **AMSI RawBytes** is the closest: it already scans an immutable in-memory
   `byte[]`. Give each worker its own `AmsiSession` and it parallelises cleanly.
 - **AMSI Text** additionally shares the decoded string and scalar map, both of
-  which are immutable — again, per-worker sessions are the only requirement.
+  which are immutable - again, per-worker sessions are the only requirement.
 - **Defender** needs per-worker independent read streams (or a single preloaded
   immutable buffer), per-worker copy buffers, and per-worker temp files.
 
@@ -109,6 +109,6 @@ nothing today and removes one landmine from that future work.
 Every distinct provider invocation (cache miss) appends one record to `ProbeLog`
 with `Sequence`, `PrefixLength`, `Status`, `ProviderResult`, `SignatureName`,
 `Cacheable`, `ElapsedMs`, and `TimestampUtc`. Cache hits are not re-logged, so
-`ProbeLog.Count` is the true provider cost of a scan — suitable for attaching a
+`ProbeLog.Count` is the true provider cost of a scan - suitable for attaching a
 full boundary-search transcript to an engagement report. The same records stream
 to `-Verbose` in real time.

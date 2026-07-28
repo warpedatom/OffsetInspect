@@ -2,12 +2,27 @@
 
 All notable changes to OffsetInspect are documented in this file. The project follows semantic versioning.
 
-## [Unreleased]
+## [3.3.0] - 2026-07-27
 
-### Planned
+### Added
 
-- Additional provider adapters after the v2 provider contract has received field testing.
-- Published benchmark baselines for representative text and binary corpora.
+- **`Get-OffsetSignature` - Authenticode signature verification (Windows-native).** Reports a
+  file's Authenticode signature using the platform's real trust validation
+  (`Get-AuthenticodeSignature` / WinVerifyTrust) - not just "is a certificate present" but is the
+  signature **Valid and trusted** against this machine's trust store, who signed it
+  (subject/issuer/thumbprint/serial/validity), whether it is **embedded- or catalog-signed**, and
+  whether it is a Windows **OS binary**. Returns the `OffsetInspect.SignatureInfo` object
+  (`IsSigned`, `Status`, `SignatureType`, `IsCatalogSigned`, `IsOSBinary`, `SignerName`/`Subject`/
+  `Issuer`/`Thumbprint`/`Serial`, `SignerNotBefore`/`NotAfter`, `SignerExpired`, `IsTimestamped`,
+  `TimestamperName`). A provenance signal that complements imphash and the Rich-header fingerprint:
+  *imports vs build toolchain vs signer*. An unsigned binary wearing a system-DLL name, or a
+  present-but-not-`Valid` signature, is a triage finding.
+  - Windows-only: Authenticode trust validation needs the Windows trust store, so on other
+    platforms it throws (mirroring the AMSI/Defender providers). The object-shaping is a pure,
+    fixture-unit-tested helper (`ConvertTo-OISignatureInfo`) that runs cross-platform in CI, plus
+    a Windows-only end-to-end test against a real catalog-signed system binary.
+  - Ships alongside the OffsetScan 0.4.0 Rich-header feature as a joint "provenance &
+    attribution" update.
 
 ## [3.2.0] - 2026-07-21
 
@@ -21,12 +36,12 @@ are unchanged.
   was an alert raised, with what context, and which telemetry sources were blind. It captures
   each accessible log's high-water `RecordId` immediately before the scan, then after it reports
   the detection(s) attributable to the scan. Encodes the "assume visibility, then validate it"
-  principle — a scan with no alert, an alert lacking a threat name, or a missing source are each
+  principle - a scan with no alert, an alert lacking a threat name, or a missing source are each
   emitted as `Findings`. Adds the `OffsetInspect.TelemetryCorrelation` object as a `Telemetry`
   property on `ThreatScanResult` (`AlertGenerated`, `Alert`, `DefenderEvents`,
   `CorrelationConfidence`, `SourcesAccessible`, `SourcesUnavailable`, `Findings`).
   - Primary source is the Microsoft Defender Operational log (event 1116/1117), which is
-    readable **non-admin**. Correlation is by `RecordId` (monotonic, timezone-proof — the
+    readable **non-admin**. Correlation is by `RecordId` (monotonic, timezone-proof - the
     Get-WinEvent `StartTime` filter is local-time and would silently exclude events).
   - Confidence is **High** only when a detection's `Source Name` matches the provider (AMSI)
     **and** its process matches the scanning host, so a coincidental concurrent detection is
@@ -45,7 +60,7 @@ Bug-fix release. No command, parameter, or output-schema changes.
 - **imphash now resolves ordinal imports from `ws2_32`/`wsock32`/`oleaut32` to their real
   function names, matching pefile and VirusTotal.** `Get-OffsetPEInfo`/`Get-OffsetIOC`
   previously rendered every ordinal import as `ord<N>`, so a binary importing those
-  libraries by ordinal — a common malware networking pattern — produced an imphash that
+  libraries by ordinal - a common malware networking pattern - produced an imphash that
   did not match the value analysts look up on VirusTotal (which uses pefile). The imphash
   was correct but non-correlatable for those samples, the opposite of its purpose. Ordinals
   from those three libraries are now resolved via pefile's tables; all other ordinal imports
@@ -71,7 +86,7 @@ Bug-fix release. No command, parameter, or output-schema changes.
   `Int32` value `-2147483648`, and casting a negative number to `UInt64` throws. Import
   parsing therefore aborted on its first statement for all PE32 files; the exception was
   caught and recorded only in the `Warnings` collection, which `Get-OffsetIOC` does not
-  surface — so the failure was invisible. The PE32+ (x64) branch already used a hex-string
+  surface - so the failure was invisible. The PE32+ (x64) branch already used a hex-string
   conversion to sidestep the same overflow class; the PE32 branch now does too. Verified
   against `SysWOW64\kernel32.dll` (imphash `5c665927b146db2f5155688ad978e69f`, 102 imports)
   and a 32-bit .NET assembly, both matching the native OffsetScan engine field-for-field.
@@ -81,7 +96,7 @@ Bug-fix release. No command, parameter, or output-schema changes.
 - imphash is a primary indicator for malware clustering, and a large fraction of malware
   ships as 32-bit PE32. Prior versions silently produced no imphash for those samples, so a
   triage row or report could omit the single most useful correlation key with no error
-  shown. Any 32-bit sample analyzed with 3.0.0–3.1.1 should be re-run.
+  shown. Any 32-bit sample analyzed with 3.0.0-3.1.1 should be re-run.
 
 ### Added
 
@@ -98,7 +113,7 @@ Bug-fix release. No command, parameter, or output-schema changes.
 - **`Get-OffsetString` split a string straddling a read-window seam into two truncated
   halves.** The file is scanned in bounded-memory windows (1 MiB by default); a run that
   reached the end of a window was emitted as-is and the remainder reported separately as a
-  new string. An indicator spanning a seam — a URL, C2 domain, or mutex name — was therefore
+  new string. An indicator spanning a seam - a URL, C2 domain, or mutex name - was therefore
   reported as two fragments, and a filter such as `Where-Object Value -match 'http'` could
   miss it entirely. A trailing run is now held back and scanned with the following window,
   so a straddling string is reported once, whole. The one remaining exception is a string
@@ -115,7 +130,7 @@ Bug-fix release. No command, parameter, or output-schema changes.
 
 - Cross-engine parity with the native [OffsetScan](https://github.com/warpedatom/OffsetScan)
   engine is now exact for string extraction. `Get-OffsetString` and `offsetscan strings`
-  return set-identical results (offset, encoding, and value) on `ntdll.dll` — 32,506 hits,
+  return set-identical results (offset, encoding, and value) on `ntdll.dll` - 32,506 hits,
   zero entries unique to either engine, holding even at a 4 KiB window (~600 seams).
   OffsetScan 0.1.1 fixes the corresponding defect on its side.
 
@@ -132,7 +147,7 @@ meanings are unchanged.
 
 ### Added
 
-- `Get-OffsetDetectionTrigger` — correlates a detection boundary to the content that most
+- `Get-OffsetDetectionTrigger` - correlates a detection boundary to the content that most
   likely produced it. Because a prefix boundary is the last byte of the earliest detected
   prefix, the trigger is a run ending at that offset; the command reports the PE section the
   boundary falls in, the entropy of the run up to it (plaintext vs packed/encoded), and the
@@ -147,12 +162,12 @@ meanings are unchanged.
   changed), a **signature-database update** (Defender signature version changed with the file
   unchanged), or a **non-deterministic** provider result. New output objects
   `OffsetInspect.DriftEntry` and `OffsetInspect.DriftReport`.
-- `Export-OffsetThreatReport -IocJsonPath` — sources IOC panels from the native OffsetScan
+- `Export-OffsetThreatReport -IocJsonPath` - sources IOC panels from the native OffsetScan
   engine's JSON (`offsetscan ioc <corpus> > ioc.json`) instead of re-scanning each file in
   PowerShell; `-IncludeIoc` becomes the live fallback for files absent from the JSON.
-- `Export-OffsetThreatReport -IncludeTrigger` — embeds detection-trigger analysis in the
+- `Export-OffsetThreatReport -IncludeTrigger` - embeds detection-trigger analysis in the
   Markdown and HTML reports.
-- `Invoke-OffsetMutationTest` — for authorized engagements, tests how robust a signature is by
+- `Invoke-OffsetMutationTest` - for authorized engagements, tests how robust a signature is by
   applying standard perturbations (case inversion, string-literal concatenation, comment
   insertion, whitespace injection) to a detected sample and re-scanning each variant with AMSI
   to report which transform classes neutralize detection. Everything runs in memory; no variant
