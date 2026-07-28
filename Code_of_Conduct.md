@@ -9,7 +9,7 @@ By participating in this project (issues, pull requests, discussions, reviews, o
 ## Our Standards
 
 - Be respectful and professional in all interactions.
-- Focus feedback on code, ideas, and behavior — never on the person.
+- Focus feedback on code, ideas, and behavior - never on the person.
 - Assume good intent and ask clarifying questions instead of reacting with hostility.
 - Welcome newcomers and help them understand the project where possible.
 - Use clear, inclusive language and avoid insults, slurs, or personal attacks.

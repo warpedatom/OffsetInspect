@@ -68,7 +68,7 @@ cross-platform (no scanner invocation). Added in 3.1.0.
 | `BoundaryByteDecimal` / `BoundaryByteHex` | Int32 / String or null | Value of the boundary byte |
 | `Section` | String or null | PE section containing the boundary (`headers`/name), null for non-PE |
 | `RegionStart` / `RegionEnd` / `RegionSize` | Int64 / Int64 / Int | Inclusive bounds of the analyzed window |
-| `PreBoundaryEntropy` | Double | Shannon entropy (bits/byte) of the run up to the boundary — low suggests plaintext, high suggests packed/encoded |
+| `PreBoundaryEntropy` | Double | Shannon entropy (bits/byte) of the run up to the boundary - low suggests plaintext, high suggests packed/encoded |
 | `CandidateStrings` | Object[] | Extracted strings ending at or straddling the boundary, ranked by proximity. Each has `Offset`, `OffsetHex`, `Encoding`, `Length`, `Value`, `EndsAtOffset`, `EndsAtHex`, `ContainsBoundary`, `DistanceToBoundary` |
 | `Interpretation` | String | One-line heuristic read of the likely trigger |
 | `HexDump` | Object[] | Structured hex rows for the window with the boundary byte highlighted |
@@ -96,7 +96,7 @@ changes can later be attributed to the file or to the signatures. Added in 3.1.0
 
 ## `OffsetInspect.DriftReport`
 
-Produced by `Get-OffsetDrift` — one per file, summarizing its journal history and explaining
+Produced by `Get-OffsetDrift` - one per file, summarizing its journal history and explaining
 each transition. Added in 3.1.0.
 
 | Property | Type | Meaning |
@@ -131,7 +131,7 @@ No variant is written to disk. Added in 3.1.0.
 ## `OffsetInspect.TelemetryCorrelation`
 
 The `Telemetry` property of a `ThreatScanResult` when `Invoke-OffsetThreatScan -CaptureTelemetry`
-is used ($null otherwise). Correlates the scan with the Windows telemetry it generated — whether
+is used ($null otherwise). Correlates the scan with the Windows telemetry it generated - whether
 a Microsoft Defender alert was raised, with what context, and which sources were blind. Windows-only.
 Added in 3.2.0.
 
@@ -146,6 +146,31 @@ Added in 3.2.0.
 | `SourcesUnavailable` | Object[] | Blind sources: `Key`, `LogName`, `Reason` (`not present` / `requires elevation`) |
 | `Findings` | String[] | Plain-language conclusions (alert with/without context, no telemetry, visibility gaps) |
 | `PollDurationMs` | Double | Time spent polling for asynchronously-written Defender events |
+
+## `OffsetInspect.SignatureInfo`
+
+Produced by `Get-OffsetSignature`. Reports a file's Authenticode signature using the platform's
+real trust validation (`Get-AuthenticodeSignature` / WinVerifyTrust) - validity against the
+machine's trust store, signer identity, and signing kind. Windows-only. Added in 3.3.0.
+
+| Property | Type | Meaning |
+|---|---|---|
+| `File` | String | File verified |
+| `FileSize` | Int64 | Size in bytes |
+| `IsSigned` | Boolean | Whether a signer certificate is present (true for embedded *and* catalog signatures, even when the signature does not validate) |
+| `Status` | String | Verification status: `Valid`, `NotSigned`, `HashMismatch`, `NotTrusted`, `UnknownError`, `NotSupportedFileFormat` |
+| `StatusMessage` | String or null | The provider's human-readable status message |
+| `SignatureType` | String or null | `Authenticode` (embedded), `Catalog`, or `None`; null on hosts whose provider omits the field |
+| `IsCatalogSigned` | Boolean | Whether the signature is catalog- rather than embedded |
+| `IsOSBinary` | Boolean or null | Whether the OS identifies it as a Windows component; null when the provider omits the field |
+| `SignerName` | String or null | Signer certificate common name (CN) |
+| `SignerSubject` / `SignerIssuer` | String or null | Full signer subject / issuer distinguished names |
+| `SignerThumbprint` / `SignerSerial` | String or null | Signer certificate thumbprint / serial number |
+| `SignerNotBefore` / `SignerNotAfter` | DateTime or null | Signer certificate validity window |
+| `SignerExpired` | Boolean or null | Whether the signer certificate is past `NotAfter` now (null when no signer) |
+| `IsTimestamped` | Boolean | Whether a trusted timestamp countersignature is present |
+| `TimestamperName` | String or null | Timestamping authority common name |
+| `Warnings` | String[] | Non-fatal notes |
 
 ## Serialization
 

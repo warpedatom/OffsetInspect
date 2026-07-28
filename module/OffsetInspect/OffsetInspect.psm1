@@ -22,6 +22,7 @@ Export-ModuleMember -Function @(
     'Get-OffsetDrift',
     'Get-OffsetEntropy',
     'Get-OffsetIOC',
+    'Get-OffsetSignature',
     'Get-OffsetString',
     'Get-OffsetPEInfo'
 )

@@ -21,13 +21,13 @@ OffsetInspect answers a practical analyst question:
 
 > What content is present at this byte offset, and what source or binary context surrounds it?
 
-It also provides an OffsetInspect-native detection-boundary workflow inspired by the same analyst problem addressed by ThreatCheck, without bundling its source or binaries: it locates the earliest content prefix that AMSI or Microsoft Defender still detects, validates the boundary repeatedly, and feeds the resulting offset straight into the context inspector. On top of that core, it adds a red-team analysis and static-triage suite — multi-region discovery, corpus scanning, detection diffing, detection-trigger correlation, drift journaling, engagement reports, entropy analysis, string extraction, and PE/imphash parsing — all read-only, plus an authorized-use signature-robustness tester that perturbs samples only in memory, and without ever disabling or reconfiguring endpoint protection.
+It also provides an OffsetInspect-native detection-boundary workflow inspired by the same analyst problem addressed by ThreatCheck, without bundling its source or binaries: it locates the earliest content prefix that AMSI or Microsoft Defender still detects, validates the boundary repeatedly, and feeds the resulting offset straight into the context inspector. On top of that core, it adds a red-team analysis and static-triage suite - multi-region discovery, corpus scanning, detection diffing, detection-trigger correlation, drift journaling, engagement reports, entropy analysis, string extraction, and PE/imphash parsing - all read-only, plus an authorized-use signature-robustness tester that perturbs samples only in memory, and without ever disabling or reconfiguring endpoint protection.
 
 ## Companion tool
 
 For corpus-scale static triage (PE parsing, entropy, strings, IOC) without
 PowerShell overhead, see **[OffsetScan](https://github.com/warpedatom/OffsetScan)**
-— a native Rust binary with the same JSON output schema. OffsetInspect 3.1.0+
+- a native Rust binary with the same JSON output schema. OffsetInspect 3.1.0+
 ingests OffsetScan IOC JSON directly via `-IocJsonPath`.
 
 ---
@@ -46,11 +46,12 @@ ingests OffsetScan IOC JSON directly via `-IocJsonPath`.
 - Records a per-probe audit trail (`ProbeLog`/`ProbeCount`) of every distinct provider invocation, streamed live to `-Verbose`, for a report-ready transcript of a scan's true provider cost.
 - Discovers multiple independently-detectable regions in one file via in-memory AMSI scanning (nothing detected is written to disk) and maps each boundary to an absolute offset.
 - Scans a corpus into a consolidated detection matrix, diffs detection between two scans, and exports Markdown/HTML engagement reports (optionally fed by the native OffsetScan engine's JSON for corpus-scale IOC panels).
-- Correlates a detection boundary to the content that produced it — the PE section, the entropy of the run up to the boundary, and the strings ending at/straddling it as candidate signature content.
+- Correlates a detection boundary to the content that produced it - the PE section, the entropy of the run up to the boundary, and the strings ending at/straddling it as candidate signature content.
 - Journals detection over time (file hash **and** the local Defender signature version) so a change in detectability can be attributed to the file, to a signature-database update, or to a non-deterministic provider result.
-- Tests signature robustness for authorized engagements by perturbing a detected sample **in memory** (case, concatenation, comment, whitespace) and reporting which transform classes evade — no variant is ever written to disk.
-- Correlates a scan with the Windows telemetry it generates (`-CaptureTelemetry`): whether a Microsoft Defender alert was raised, with what context, and which telemetry sources were blind — encoding the "assume visibility, then validate it" principle. Read-only, non-admin, Windows-only.
+- Tests signature robustness for authorized engagements by perturbing a detected sample **in memory** (case, concatenation, comment, whitespace) and reporting which transform classes evade - no variant is ever written to disk.
+- Correlates a scan with the Windows telemetry it generates (`-CaptureTelemetry`): whether a Microsoft Defender alert was raised, with what context, and which telemetry sources were blind - encoding the "assume visibility, then validate it" principle. Read-only, non-admin, Windows-only.
 - Adds static malware-triage helpers: per-window entropy (packed/encrypted regions), ASCII/UTF-16LE string extraction with offsets, and PE header/section/import parsing with imphash and overlay detection.
+- Verifies Authenticode provenance (`Get-OffsetSignature`): using the platform's real trust validation, reports whether a file is validly signed and trusted, who signed it, and whether it is embedded- or catalog-signed - a signer signal that complements imphash and the build-toolchain fingerprint (imports vs toolchain vs signer). Windows-only.
 - Never changes Defender exclusions, real-time protection, or system security configuration.
 - Ships as a self-contained PowerShell Gallery package with no external runtime dependencies; YARA and ClamAV scanning are the only optional exceptions, each requiring its own external engine.
 
@@ -74,8 +75,9 @@ ingests OffsetScan IOC JSON directly via `-IocJsonPath`.
 | `Get-OffsetString` | Extract ASCII/UTF-16LE strings with byte offsets | Cross-platform |
 | `Get-OffsetPEInfo` | PE headers, sections, imports/imphash, overlay, offset→section | Cross-platform |
 | `Get-OffsetIOC` | Consolidated indicator panel: hashes, entropy, PE/imphash, strings | Cross-platform |
+| `Get-OffsetSignature` | Authenticode signature: is it validly signed and trusted, by whom, embedded vs catalog | Windows |
 
-¹ These two commands have optional external dependencies: `Invoke-OffsetYaraScan` needs the YARA engine (`winget install VirusTotal.YARA`), and `Invoke-OffsetClamScan` needs ClamAV with signature databases (`winget install Cisco.ClamAV`, then `freshclam`). Every other command is self-contained. ClamAV is a single-file detector here, not a boundary-search engine — `clamscan` loads its full database per invocation, so bisection would require the `clamd` daemon.
+¹ These two commands have optional external dependencies: `Invoke-OffsetYaraScan` needs the YARA engine (`winget install VirusTotal.YARA`), and `Invoke-OffsetClamScan` needs ClamAV with signature databases (`winget install Cisco.ClamAV`, then `freshclam`). Every other command is self-contained. ClamAV is a single-file detector here, not a boundary-search engine - `clamscan` loads its full database per invocation, so bisection would require the `clamd` daemon.
 
 ² `Add-OffsetDriftEntry` journals cross-platform, but the Defender signature/engine version fields populate only on Windows (via `Get-MpComputerStatus`); elsewhere they record as null and the rest of the snapshot is still written.
 
@@ -295,15 +297,15 @@ Target byte:          69 (105)
 0006CDFF  69 74 0A                                          it.
 ```
 
-Both engines converge on **line 4586** — Defender's boundary falls inside the trailing `it` of `Invoke-PrivescAudit`, AMSI's on the newline that terminates the same line, two bytes later. Neither offset is "the signature": they are the earliest prefix each provider still flagged, and the two-byte disagreement is exactly the tokenization/context effect described above. Defender additionally names what it matched (`Trojan:Win32/Kepavll!rfn`); AMSI reports no signature name, which is why `Invoke-OffsetThreatScanRegion` and `Get-OffsetDetectionTrigger` exist to characterize an AMSI hit.
+Both engines converge on **line 4586** - Defender's boundary falls inside the trailing `it` of `Invoke-PrivescAudit`, AMSI's on the newline that terminates the same line, two bytes later. Neither offset is "the signature": they are the earliest prefix each provider still flagged, and the two-byte disagreement is exactly the tokenization/context effect described above. Defender additionally names what it matched (`Trojan:Win32/Kepavll!rfn`); AMSI reports no signature name, which is why `Invoke-OffsetThreatScanRegion` and `Get-OffsetDetectionTrigger` exist to characterize an AMSI hit.
 
-Both scans cost 25 provider probes for a ~436 KiB file — the bisection is logarithmic in file size, and every probe is recorded in `ProbeLog`.
+Both scans cost 25 provider probes for a ~436 KiB file - the bisection is logarithmic in file size, and every probe is recorded in `ProbeLog`.
 
 See [Threat scanning design](./docs/THREAT-SCANNING.md) for the provider contract and interpretation guidance, [provider interface](./docs/PROVIDER-INTERFACE.md) for the scanner contract and how to add a provider without touching the search core, [threat-scanning provenance](./docs/PROVENANCE.md) for implementation boundaries and attribution, and [output schema](./docs/OUTPUT-SCHEMA.md) for the versioned object contract.
 
 ### Detection-boundary reports
 
-`Export-OffsetThreatReport` turns one or more scan results into a self-contained Markdown or HTML report — per-file summary, provider/signature/engine metadata, the full `ProbeLog` audit trail, and warnings — for attaching to an engagement writeup. It reads results only and never re-scans, so it runs cross-platform. Add `-IncludeIoc` to fold a hash/entropy/PE indicator panel (the same data as `Get-OffsetIOC`) into each report entry, and `-IncludeTrigger` to add a detection-trigger analysis (see below) for every result with a boundary.
+`Export-OffsetThreatReport` turns one or more scan results into a self-contained Markdown or HTML report - per-file summary, provider/signature/engine metadata, the full `ProbeLog` audit trail, and warnings - for attaching to an engagement writeup. It reads results only and never re-scans, so it runs cross-platform. Add `-IncludeIoc` to fold a hash/entropy/PE indicator panel (the same data as `Get-OffsetIOC`) into each report entry, and `-IncludeTrigger` to add a detection-trigger analysis (see below) for every result with a boundary.
 
 ```powershell
 Invoke-OffsetThreatScan ./sample.ps1 -Engine AMSI -ScanMode Text -PassThru |
@@ -334,7 +336,7 @@ Invoke-OffsetThreatScanBatch ./samples -Summary |
 
 ### Detection diff / regression
 
-`Compare-OffsetThreatResult` diffs two scan results — for example the same file before and after a signature-definition update — and classifies the change (`NewlyDetected`, `NoLongerDetected`, `BoundaryEarlier`, `BoundaryLater`, `BoundaryUnchanged`, `BothClean`) with the boundary delta and changed fields.
+`Compare-OffsetThreatResult` diffs two scan results - for example the same file before and after a signature-definition update - and classifies the change (`NewlyDetected`, `NoLongerDetected`, `BoundaryEarlier`, `BoundaryLater`, `BoundaryUnchanged`, `BothClean`) with the boundary delta and changed fields.
 
 ```powershell
 $before = Invoke-OffsetThreatScan ./sample.ps1 -Engine Defender -PassThru
@@ -345,7 +347,7 @@ Compare-OffsetThreatResult -Reference $before -Difference $after
 
 ### Multi-region discovery
 
-The prefix search finds the *first* detection boundary. `Invoke-OffsetThreatScanRegion` finds *multiple* independently-detectable regions by splitting the file into segments and scanning each in isolation through AMSI **entirely in memory** — nothing detected is written to disk, so Defender real-time protection is never triggered or reconfigured. Each hit is bisected within its segment to map the exact triggering boundary to an absolute file offset.
+The prefix search finds the *first* detection boundary. `Invoke-OffsetThreatScanRegion` finds *multiple* independently-detectable regions by splitting the file into segments and scanning each in isolation through AMSI **entirely in memory** - nothing detected is written to disk, so Defender real-time protection is never triggered or reconfigured. Each hit is bisected within its segment to map the exact triggering boundary to an absolute file offset.
 
 ```powershell
 Invoke-OffsetThreatScanRegion ./payload.bin -SegmentCount 16 |
@@ -353,11 +355,11 @@ Invoke-OffsetThreatScanRegion ./payload.bin -SegmentCount 16 |
     Format-Table SegmentIndex, StartOffset, EndOffset, AbsoluteBoundaryOffset, SignatureName
 ```
 
-This reports regions that trigger on their own; it can miss signatures that only fire in full-file context or that straddle a segment boundary, so treat the regions as leads to confirm with `Invoke-OffsetThreatScan` and manual validation. AMSI (in-memory) is the only engine supported here — Defender file scanning would require writing detected content to disk.
+This reports regions that trigger on their own; it can miss signatures that only fire in full-file context or that straddle a segment boundary, so treat the regions as leads to confirm with `Invoke-OffsetThreatScan` and manual validation. AMSI (in-memory) is the only engine supported here - Defender file scanning would require writing detected content to disk.
 
 ### Detection-trigger correlation
 
-A boundary tells you *where* detection flips; `Get-OffsetDetectionTrigger` tells you *what* is there. Because a prefix boundary is the last byte of the earliest detected prefix, the triggering content is a run ending at that offset. The command reports the PE section the boundary falls in, the entropy of the run up to it (plaintext vs packed/encoded), and the extracted strings ending at or straddling it, ranked by proximity — the candidate signature content — with a one-line interpretation. It reads bytes only and never re-scans, so it runs cross-platform on saved results.
+A boundary tells you *where* detection flips; `Get-OffsetDetectionTrigger` tells you *what* is there. Because a prefix boundary is the last byte of the earliest detected prefix, the triggering content is a run ending at that offset. The command reports the PE section the boundary falls in, the entropy of the run up to it (plaintext vs packed/encoded), and the extracted strings ending at or straddling it, ranked by proximity - the candidate signature content - with a one-line interpretation. It reads bytes only and never re-scans, so it runs cross-platform on saved results.
 
 ```powershell
 Invoke-OffsetThreatScan ./flagged.ps1 -Engine AMSI -PassThru | Get-OffsetDetectionTrigger
@@ -369,7 +371,7 @@ Get-OffsetDetectionTrigger -FilePath ./sample.bin -BoundaryOffset 0x4A1 |
 
 ### Detection-drift journal
 
-"It was detected before and now it isn't" has three very different causes: the file changed, the signatures changed, or the provider is non-deterministic. `Add-OffsetDriftEntry` records append-only NDJSON snapshots — file SHA-256, status, boundary, signature name, and the local Defender signature/engine versions — and `Get-OffsetDrift` reads that history and attributes each change to the right cause.
+"It was detected before and now it isn't" has three very different causes: the file changed, the signatures changed, or the provider is non-deterministic. `Add-OffsetDriftEntry` records append-only NDJSON snapshots - file SHA-256, status, boundary, signature name, and the local Defender signature/engine versions - and `Get-OffsetDrift` reads that history and attributes each change to the right cause.
 
 ```powershell
 # Record a snapshot over time (from a scan result, or directly):
@@ -384,7 +386,7 @@ Each transition is labelled: a SHA-256 change reads as a **file modification**; 
 
 ### Signature-robustness testing (authorized use only)
 
-`Invoke-OffsetMutationTest` answers a detection-engineering question: is a signature a brittle exact-literal match, or is it robust to common obfuscation? Given a sample that AMSI currently detects, it applies standard perturbations — case inversion, string-literal concatenation, comment insertion, whitespace injection — and re-scans each variant to report which classes neutralize detection. **Everything happens in memory** via AMSI's in-process interface; no variant is written to disk, so no evasive artifacts are produced and Defender real-time protection is not involved. The command refuses to run without `-AuthorizedEngagement`, and is intended only for samples you are authorized to test.
+`Invoke-OffsetMutationTest` answers a detection-engineering question: is a signature a brittle exact-literal match, or is it robust to common obfuscation? Given a sample that AMSI currently detects, it applies standard perturbations - case inversion, string-literal concatenation, comment insertion, whitespace injection - and re-scans each variant to report which classes neutralize detection. **Everything happens in memory** via AMSI's in-process interface; no variant is written to disk, so no evasive artifacts are produced and Defender real-time protection is not involved. The command refuses to run without `-AuthorizedEngagement`, and is intended only for samples you are authorized to test.
 
 ```powershell
 Invoke-OffsetMutationTest -FilePath ./flagged.ps1 -AuthorizedEngagement |
@@ -395,7 +397,7 @@ A result of, say, "brittle: neutralized by StringConcatenation, CommentInsertion
 
 ### Telemetry correlation
 
-Detecting a boundary tells you what the *engine* sees; `-CaptureTelemetry` tells you what the *defender* sees. It snapshots each accessible Windows telemetry log's high-water mark before the scan, then reports whether the action raised an alert, with what context, and which sources were blind — the "assume visibility, then validate it" question, answered with evidence.
+Detecting a boundary tells you what the *engine* sees; `-CaptureTelemetry` tells you what the *defender* sees. It snapshots each accessible Windows telemetry log's high-water mark before the scan, then reports whether the action raised an alert, with what context, and which sources were blind - the "assume visibility, then validate it" question, answered with evidence.
 
 ```powershell
 $r = Invoke-OffsetThreatScan ./flagged.ps1 -Engine AMSI -CaptureTelemetry -PassThru
@@ -405,10 +407,10 @@ $r.Telemetry.Alert | Format-List ThreatName, SeverityName, SourceName, ProcessNa
 
 The `Telemetry` property (`OffsetInspect.TelemetryCorrelation`) reports:
 
-- `AlertGenerated` / `Alert` — whether a Microsoft Defender detection (event 1116/1117) was logged for the scan, and its context (threat name, severity, detection source, process, user).
-- `CorrelationConfidence` — **High** only when the detection's source matches the provider **and** its process matches the scanning host, so a coincidental concurrent detection is never claimed; Medium on source alone; Low on neither.
-- `SourcesAccessible` / `SourcesUnavailable` — which telemetry logs were readable and which were blind (Sysmon absent, the Security log requiring elevation). A visibility gap is itself a finding.
-- `Findings` — plain-language conclusions: an alert with full context, an alert lacking a threat name, no telemetry at all, or a missing source.
+- `AlertGenerated` / `Alert` - whether a Microsoft Defender detection (event 1116/1117) was logged for the scan, and its context (threat name, severity, detection source, process, user).
+- `CorrelationConfidence` - **High** only when the detection's source matches the provider **and** its process matches the scanning host, so a coincidental concurrent detection is never claimed; Medium on source alone; Low on neither.
+- `SourcesAccessible` / `SourcesUnavailable` - which telemetry logs were readable and which were blind (Sysmon absent, the Security log requiring elevation). A visibility gap is itself a finding.
+- `Findings` - plain-language conclusions: an alert with full context, an alert lacking a threat name, no telemetry at all, or a missing source.
 
 The primary source is the Microsoft Defender Operational log, readable without elevation; correlation is by event `RecordId` (monotonic and timezone-independent). Windows-only, and inert unless `-CaptureTelemetry` is passed.
 
@@ -416,10 +418,10 @@ The primary source is the Microsoft Defender Operational log, readable without e
 
 Three cross-platform static-analysis commands support malware triage and compose with the offset core:
 
-- `Get-OffsetEntropy` — per-window Shannon entropy (bits/byte) to locate packed or encrypted regions; cross-reference the flagged windows with `Invoke-OffsetThreatScanRegion` detections.
-- `Get-OffsetString` — printable ASCII and UTF-16LE strings with byte offsets; pipe offsets into `Invoke-OffsetInspect` for context.
-- `Get-OffsetPEInfo` — PE machine/bitness, entry point, section table, **imports and imphash**, appended-**overlay** detection, and resource size, with `-Offset` mapping a byte offset to its section (`.text`, `.rsrc`, ...). Imphash uses the standard `library.function` MD5 and is verified byte-identical to pefile/VirusTotal — including special-library ordinal resolution, so an ordinal imported from `ws2_32`/`wsock32`/`oleaut32` resolves to its real function name; every other ordinal import renders `ordNNN`, exactly as pefile does.
-- `Get-OffsetIOC` — one-shot indicator panel combining the above: MD5/SHA-1/SHA-256 (single-pass), overall entropy, printable-string count, and PE machine/imphash/overlay when applicable.
+- `Get-OffsetEntropy` - per-window Shannon entropy (bits/byte) to locate packed or encrypted regions; cross-reference the flagged windows with `Invoke-OffsetThreatScanRegion` detections.
+- `Get-OffsetString` - printable ASCII and UTF-16LE strings with byte offsets; pipe offsets into `Invoke-OffsetInspect` for context.
+- `Get-OffsetPEInfo` - PE machine/bitness, entry point, section table, **imports and imphash**, appended-**overlay** detection, and resource size, with `-Offset` mapping a byte offset to its section (`.text`, `.rsrc`, ...). Imphash uses the standard `library.function` MD5 and is verified byte-identical to pefile/VirusTotal - including special-library ordinal resolution, so an ordinal imported from `ws2_32`/`wsock32`/`oleaut32` resolves to its real function name; every other ordinal import renders `ordNNN`, exactly as pefile does.
+- `Get-OffsetIOC` - one-shot indicator panel combining the above: MD5/SHA-1/SHA-256 (single-pass), overall entropy, printable-string count, and PE machine/imphash/overlay when applicable.
 
 ```powershell
 Get-OffsetEntropy ./sample.bin -HighOnly | Select-Object -ExpandProperty Windows
@@ -430,7 +432,7 @@ Get-OffsetIOC ./sample.exe | Format-List
 
 ### YARA scanning
 
-`Invoke-OffsetYaraScan` runs analyst-authored YARA rules and returns each match with its byte offset — complementing the AMSI/Defender detection-boundary view with signatures you control, and needing no antivirus installed (only the YARA engine, e.g. `winget install VirusTotal.YARA`). Offsets feed straight into the inspector.
+`Invoke-OffsetYaraScan` runs analyst-authored YARA rules and returns each match with its byte offset - complementing the AMSI/Defender detection-boundary view with signatures you control, and needing no antivirus installed (only the YARA engine, e.g. `winget install VirusTotal.YARA`). Offsets feed straight into the inspector.
 
 ```powershell
 Invoke-OffsetYaraScan ./sample.bin -RulePath ./rules/malware.yar |
@@ -439,7 +441,7 @@ Invoke-OffsetYaraScan ./sample.bin -RulePath ./rules/malware.yar |
 
 ### ClamAV scanning
 
-`Invoke-OffsetClamScan` scans a file with the ClamAV on-demand engine and returns a normalized result (`Clean` / `Detected` / `Error`, plus the signature name). Because `clamscan` loads its full signature database on every call, it is a single-file detector, not a boundary-search engine (that would require the `clamd` daemon). It needs ClamAV installed **and** its signature databases downloaded — `freshclam` will not run until a config file exists:
+`Invoke-OffsetClamScan` scans a file with the ClamAV on-demand engine and returns a normalized result (`Clean` / `Detected` / `Error`, plus the signature name). Because `clamscan` loads its full signature database on every call, it is a single-file detector, not a boundary-search engine (that would require the `clamd` daemon). It needs ClamAV installed **and** its signature databases downloaded - `freshclam` will not run until a config file exists:
 
 ```powershell
 # One-time setup: create the freshclam config (remove the sample's "Example" line), then fetch databases.

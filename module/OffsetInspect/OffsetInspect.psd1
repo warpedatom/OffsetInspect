@@ -1,6 +1,6 @@
 @{
     RootModule           = 'OffsetInspect.psm1'
-    ModuleVersion        = '3.2.0'
+    ModuleVersion        = '3.3.0'
     GUID                 = '2d9f6f83-2c4f-4a6e-8a53-1cf9a5fbc2f6'
     Author               = 'Jared Perry (Velkris)'
     CompanyName          = 'DreadHost Research'
@@ -31,6 +31,7 @@
         'Private/Threat.Mutation.ps1',
         'Private/Threat.Region.ps1',
         'Private/Threat.Search.ps1',
+        'Private/Threat.Signature.ps1',
         'Private/Threat.Telemetry.ps1',
         'Private/Threat.Text.ps1',
         'Private/Threat.Trigger.ps1',
@@ -49,6 +50,7 @@
         'Public/Get-OffsetDrift.ps1',
         'Public/Get-OffsetEntropy.ps1',
         'Public/Get-OffsetIOC.ps1',
+        'Public/Get-OffsetSignature.ps1',
         'Public/Get-OffsetString.ps1',
         'Public/Get-OffsetPEInfo.ps1'
     )
@@ -68,6 +70,7 @@
         'Get-OffsetDrift',
         'Get-OffsetEntropy',
         'Get-OffsetIOC',
+        'Get-OffsetSignature',
         'Get-OffsetString',
         'Get-OffsetPEInfo'
     )
@@ -87,11 +90,15 @@
                 'Hex',
                 'AMSI',
                 'MicrosoftDefender',
+                'Authenticode',
                 'OffsetAnalysis'
             )
             LicenseUri = 'https://github.com/warpedatom/OffsetInspect/blob/main/LICENSE'
             ProjectUri = 'https://github.com/warpedatom/OffsetInspect'
             ReleaseNotes = @'
+OffsetInspect 3.3.0
+- Adds Get-OffsetSignature: reports a file's Authenticode signature using the platform's real trust validation (Get-AuthenticodeSignature / WinVerifyTrust) - not just "is a cert present" but is the signature Valid and trusted against this machine's trust store, who signed it (subject/issuer/thumbprint/validity), whether it is embedded- or catalog-signed, and whether it is a Windows OS binary. Returns the OffsetInspect.SignatureInfo object (IsSigned, Status, SignatureType, IsCatalogSigned, IsOSBinary, SignerName/Subject/Issuer/Thumbprint/Serial, SignerNotBefore/NotAfter, SignerExpired, IsTimestamped, TimestamperName). A provenance signal that complements imphash and the Rich-header fingerprint: imports vs build toolchain vs signer. An unsigned binary wearing a system-DLL name, or a present-but-not-Valid signature, is a triage finding. Windows-only (Authenticode trust validation needs the Windows trust store); the object-shaping is a pure, unit-tested helper so it runs cross-platform in CI. Pairs with the OffsetScan 0.4.0 Rich-header release.
+
 OffsetInspect 3.2.0
 - Adds telemetry correlation: Invoke-OffsetThreatScan -CaptureTelemetry snapshots the Windows telemetry high-water marks before a scan and, after it, reports whether the action generated a defender alert, with what context (threat name, severity, detection source, process, user), and which telemetry sources were blind. Encodes the "assume visibility, then validate it" principle: absence of an alert, an alert without context, or a missing source are each surfaced as findings. Adds the OffsetInspect.TelemetryCorrelation object (Telemetry property on ThreatScanResult). Primary source is the Microsoft Defender Operational log (1116/1117), read non-admin; correlation is by RecordId (timezone-proof) with confidence scored High only on matching detection source AND scanning process. Sysmon/Security are reported as visibility gaps when absent or inaccessible. Windows-only; off unless -CaptureTelemetry is passed.
 
